@@ -846,11 +846,9 @@ NB_MODULE(lichtfeld, m) {
 
     m.def(
         "select_node", [](const std::string& name) {
-            lfs::core::events::ui::NodeSelected{
-                .path = name,
-                .type = "PLY",
-                .metadata = {{"name", name}}}
-                .emit();
+            auto* sm = lfs::python::get_scene_manager();
+            if (sm)
+                sm->selectNode(name);
         },
         nb::arg("name"), "Select a scene node by name");
 

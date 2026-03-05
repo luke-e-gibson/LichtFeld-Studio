@@ -33,6 +33,11 @@ body {
     right: 0;
     display: flex;
     justify-content: center;
+    pointer-events: none;
+}
+
+.toolbar-hcenter > div {
+    pointer-events: auto;
 }
 
 .toolbar-separator {

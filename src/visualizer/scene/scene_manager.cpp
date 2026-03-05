@@ -170,8 +170,11 @@ namespace lfs::vis {
             if (event.type == "PLY" || event.type == "Group" || event.type == "Dataset" ||
                 event.type == "PointCloud" || event.type == "CameraGroup" || event.type == "Camera") {
                 const core::NodeId id = scene_.getNodeIdByName(event.path);
-                if (id != core::NULL_NODE)
-                    selection_.selectNode(id);
+                if (id == core::NULL_NODE)
+                    return;
+                if (selection_.selectedNodeCount() == 1 && selection_.isNodeSelected(id))
+                    return;
+                selection_.selectNode(id);
                 syncCropBoxToRenderSettings();
             }
         });
@@ -601,6 +604,9 @@ namespace lfs::vis {
         if (id == core::NULL_NODE)
             return;
 
+        if (selection_.selectedNodeCount() == 1 && selection_.isNodeSelected(id))
+            return;
+
         selection_.selectNode(id);
 
         const auto* node = scene_.getNodeById(id);
@@ -626,6 +632,16 @@ namespace lfs::vis {
             if (id != core::NULL_NODE)
                 ids.push_back(id);
         }
+
+        {
+            std::shared_lock lock(selection_.mutex());
+            const auto& current = selection_.selectedNodeIds();
+            if (current.size() == ids.size() &&
+                std::all_of(ids.begin(), ids.end(),
+                            [&](core::NodeId id) { return current.contains(id); }))
+                return;
+        }
+
         selection_.selectNodes(ids);
         python::invalidate_poll_caches(1);
         if (services().renderingOrNull())
@@ -635,6 +651,8 @@ namespace lfs::vis {
     void SceneManager::addToSelection(const std::string& name) {
         const core::NodeId id = scene_.getNodeIdByName(name);
         if (id == core::NULL_NODE)
+            return;
+        if (selection_.isNodeSelected(id))
             return;
         selection_.addToSelection(id);
         python::invalidate_poll_caches(1);

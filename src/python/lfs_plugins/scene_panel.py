@@ -587,6 +587,8 @@ class ScenePanel(RmlPanel):
             lf.select_nodes(names)
             self._selected_nodes = set(names)
         else:
+            if self._selected_nodes == {node_name}:
+                return
             lf.select_node(node_name)
             self._selected_nodes = {node_name}
             self._click_anchor = node_name
