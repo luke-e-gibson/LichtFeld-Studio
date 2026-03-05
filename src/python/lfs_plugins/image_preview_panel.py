@@ -63,6 +63,14 @@ class ImagePreviewPanel(RmlPanel):
         self._show_filmstrip = True
         self._show_overlay = False
 
+        self._pan_x = 0.0
+        self._pan_y = 0.0
+        self._dragging = False
+        self._drag_start_x = 0.0
+        self._drag_start_y = 0.0
+        self._drag_start_pan_x = 0.0
+        self._drag_start_pan_y = 0.0
+
         self._doc = None
         self._dirty = True
         self._filmstrip_needs_rebuild = True
@@ -110,9 +118,18 @@ class ImagePreviewPanel(RmlPanel):
             if el:
                 el.add_event_listener("mousescroll", self._on_precise_scroll)
 
+        img_container = doc.get_element_by_id("image-container")
+        if img_container:
+            img_container.add_event_listener("mousescroll", self._on_wheel)
+            img_container.add_event_listener("mousedown", self._on_img_mousedown)
+            img_container.add_event_listener("mouseup", self._on_img_mouseup)
+            img_container.add_event_listener("mousemove", self._on_img_mousemove)
+            img_container.add_event_listener("mouseout", self._on_img_mouseout)
+
         wf = doc.get_element_by_id("window-frame")
 
         doc.add_event_listener("keydown", self._on_keydown)
+        doc.add_event_listener("resize", self._on_layout_resize)
         if wf:
             wf.add_event_listener("keydown", self._on_keydown)
 
@@ -132,11 +149,20 @@ class ImagePreviewPanel(RmlPanel):
         self._image_paths = [p.resolve() for p in image_paths]
         self._mask_paths = [p.resolve() if p else None for p in mask_paths] if mask_paths else [None] * len(image_paths)
         self._current_index = min(start_index, len(image_paths) - 1)
-        self._zoom = 1.0
-        self._fit_to_window = True
+        self._reset_view()
         self._dirty = True
         self._filmstrip_needs_rebuild = True
         self._prev_index = -1
+
+    def _reset_pan(self):
+        self._pan_x = 0.0
+        self._pan_y = 0.0
+        self._dragging = False
+
+    def _reset_view(self):
+        self._zoom = 1.0
+        self._fit_to_window = True
+        self._reset_pan()
 
     def _refresh_immediately(self):
         if self._doc:
@@ -149,17 +175,19 @@ class ImagePreviewPanel(RmlPanel):
         new_idx = self._current_index + delta
         if 0 <= new_idx < len(self._image_paths):
             self._current_index = new_idx
+            self._reset_pan()
             self._refresh_immediately()
 
     def _go_to_image(self, index: int):
         if 0 <= index < len(self._image_paths):
             self._current_index = index
+            self._reset_pan()
             self._refresh_immediately()
 
     def _toggle_fit(self):
         self._fit_to_window = not self._fit_to_window
         if self._fit_to_window:
-            self._zoom = 1.0
+            self._reset_view()
         self._dirty = True
 
     def _copy_path_to_clipboard(self):
@@ -212,15 +240,15 @@ class ImagePreviewPanel(RmlPanel):
             return f"{w / h:.2f}:1"
         return f"{rw}:{rh}"
 
-    def _on_fit_checkbox_change(self, event):
+    def _on_fit_checkbox_change(self, _event):
         cb = self._doc.get_element_by_id("cb-fit") if self._doc else None
         if cb:
             self._fit_to_window = cb.has_attribute("checked")
             if self._fit_to_window:
-                self._zoom = 1.0
+                self._reset_view()
             self._dirty = True
 
-    def _on_mask_checkbox_change(self, event):
+    def _on_mask_checkbox_change(self, _event):
         cb = self._doc.get_element_by_id("cb-mask") if self._doc else None
         if cb:
             self._show_overlay = cb.has_attribute("checked")
@@ -247,44 +275,110 @@ class ImagePreviewPanel(RmlPanel):
 
         event.stop_propagation()
 
-    def _apply_zoom(self, img_el, path: Path):
+    def _on_wheel(self, event):
+        delta = float(event.get_parameter("wheel_delta_y", "0"))
+        if delta == 0:
+            return
+        event.stop_propagation()
+        if delta > 0:
+            self._zoom = min(ZOOM_MAX, self._zoom * 1.15)
+        else:
+            self._zoom = max(ZOOM_MIN, self._zoom / 1.15)
+        self._fit_to_window = False
+        self._dirty = True
+
+    def _on_img_mousedown(self, event):
         if self._fit_to_window:
-            img_el.remove_property("width")
-            img_el.remove_property("height")
             return
+        button = int(event.get_parameter("button", "0"))
+        if button != 0:
+            return
+        self._dragging = True
+        self._drag_start_x = float(event.get_parameter("mouse_x", "0"))
+        self._drag_start_y = float(event.get_parameter("mouse_y", "0"))
+        self._drag_start_pan_x = self._pan_x
+        self._drag_start_pan_y = self._pan_y
+
+    def _on_img_mouseup(self, _event):
+        self._dragging = False
+
+    def _on_img_mousemove(self, event):
+        if not self._dragging:
+            return
+        mx = float(event.get_parameter("mouse_x", "0"))
+        my = float(event.get_parameter("mouse_y", "0"))
+        self._pan_x = self._drag_start_pan_x + (mx - self._drag_start_x)
+        self._pan_y = self._drag_start_pan_y + (my - self._drag_start_y)
+        self._dirty = True
+
+    def _on_img_mouseout(self, _event):
+        self._dragging = False
+
+    def _on_layout_resize(self, _event):
+        self._dirty = True
+
+    def _apply_zoom(self, img_el, path: Path):
+        viewport = self._doc.get_element_by_id("image-viewport") if self._doc else None
         w, h, _ = self._get_image_info(path)
-        if w <= 0 or h <= 0:
+        if not viewport or w <= 0 or h <= 0:
             return
-        dw = int(w * self._zoom)
-        dh = int(h * self._zoom)
+
+        vw = max(1, viewport.client_width)
+        vh = max(1, viewport.client_height)
+
+        if self._fit_to_window:
+            scale = min(1.0, vw / w, vh / h)
+        else:
+            scale = self._zoom
+
+        dw = max(1, int(round(w * scale)))
+        dh = max(1, int(round(h * scale)))
+
+        ox = (vw - dw) * 0.5
+        oy = (vh - dh) * 0.5
+        if not self._fit_to_window:
+            ox += self._pan_x
+            oy += self._pan_y
+
         img_el.set_property("width", f"{dw}dp")
         img_el.set_property("height", f"{dh}dp")
+        img_el.set_property("max-width", "none")
+        img_el.set_property("max-height", "none")
+        img_el.set_property("left", f"{int(round(ox))}dp")
+        img_el.set_property("top", f"{int(round(oy))}dp")
+        img_el.remove_property("margin-left")
+        img_el.remove_property("margin-top")
 
     # -- UI refresh --
 
     def _refresh_ui(self, doc):
         has_images = bool(self._image_paths)
 
-        self._update_main_image(doc, has_images)
         self._update_filmstrip(doc, has_images)
-        self._update_nav_arrows(doc, has_images)
         self._update_sidebar(doc, has_images)
+        self._update_nav_arrows(doc, has_images)
+        self._update_main_image(doc, has_images)
         self._update_status(doc, has_images)
 
         if hasattr(self, '_handle'):
             self._handle.dirty("panel_label")
 
     def _update_main_image(self, doc, has_images: bool):
+        img_container = doc.get_element_by_id("image-container")
         main_img = doc.get_element_by_id("main-image")
         mask_img = doc.get_element_by_id("mask-overlay")
         no_text = doc.get_element_by_id("no-image-text")
 
+        if img_container:
+            img_container.set_attribute("class", "pannable" if has_images and not self._fit_to_window else "")
+
         if not has_images:
             if main_img:
                 main_img.set_attribute("class", "hidden")
-                main_img.set_attribute("src", "")
+                main_img.set_property("decorator", "none")
             if mask_img:
                 mask_img.set_attribute("class", "")
+                mask_img.set_property("decorator", "none")
             if no_text:
                 no_text.set_attribute("class", "")
                 no_text.set_inner_rml(_xml_escape(lf.ui.tr("image_preview.no_images_loaded")))
@@ -293,7 +387,7 @@ class ImagePreviewPanel(RmlPanel):
         path = self._image_paths[self._current_index]
         if main_img:
             main_img.set_attribute("class", "")
-            main_img.set_attribute("src", str(path))
+            main_img.set_property("decorator", f"image({path})")
             self._apply_zoom(main_img, path)
         if no_text:
             no_text.set_attribute("class", "hidden")
@@ -302,12 +396,12 @@ class ImagePreviewPanel(RmlPanel):
         if mask_img:
             if show_mask:
                 mask_path = self._mask_paths[self._current_index]
-                mask_img.set_attribute("src", str(mask_path))
+                mask_img.set_property("decorator", f"image({mask_path})")
                 mask_img.set_attribute("class", "visible")
                 self._apply_zoom(mask_img, path)
             else:
                 mask_img.set_attribute("class", "")
-                mask_img.set_attribute("src", "")
+                mask_img.set_property("decorator", "none")
 
     def _update_filmstrip(self, doc, has_images: bool):
         filmstrip = doc.get_element_by_id("filmstrip")
@@ -514,6 +608,7 @@ class ImagePreviewPanel(RmlPanel):
         elif key == KI_1:
             self._zoom = 1.0
             self._fit_to_window = False
+            self._reset_pan()
             self._dirty = True
             event.stop_propagation()
         elif key == KI_OEM_PLUS:
@@ -526,13 +621,13 @@ class ImagePreviewPanel(RmlPanel):
             if self._fit_to_window:
                 self._fit_to_window = False
                 self._zoom = 1.0
+                self._reset_pan()
             else:
-                self._fit_to_window = True
+                self._reset_view()
             self._dirty = True
             event.stop_propagation()
         elif key == KI_R:
-            self._zoom = 1.0
-            self._fit_to_window = True
+            self._reset_view()
             self._dirty = True
             event.stop_propagation()
         elif key == KI_ESCAPE:

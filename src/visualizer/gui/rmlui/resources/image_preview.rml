@@ -8,10 +8,12 @@
   <div id="main-area">
     <div id="filmstrip"></div>
     <div id="image-container">
+      <div id="image-viewport">
+        <div id="main-image"></div>
+        <div id="mask-overlay"></div>
+        <span id="no-image-text"></span>
+      </div>
       <div class="nav-arrow" id="nav-prev">&#x25C0;</div>
-      <img id="main-image" src=""/>
-      <img id="mask-overlay" src=""/>
-      <span id="no-image-text"></span>
       <div class="nav-arrow" id="nav-next">&#x25B6;</div>
     </div>
     <div id="sidebar">
