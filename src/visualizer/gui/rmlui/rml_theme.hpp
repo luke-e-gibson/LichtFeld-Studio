@@ -5,9 +5,9 @@
 #pragma once
 
 #include <core/export.hpp>
-#include <imgui.h>
 #include <cstddef>
 #include <string>
+#include <imgui.h>
 
 namespace Rml {
     class ElementDocument;
