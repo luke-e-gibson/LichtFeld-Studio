@@ -109,6 +109,30 @@ namespace lfs::vis::gui {
                 color.w};
         }
 
+        bool isTextEditableElement(Rml::Element* element) {
+            if (!element)
+                return false;
+
+            const auto tag = element->GetTagName();
+            if (tag == "textarea")
+                return true;
+            if (tag != "input")
+                return false;
+
+            const auto input_type = element->GetAttribute<Rml::String>("type", "text");
+            return input_type.empty() || input_type == "text" || input_type == "password" ||
+                   input_type == "search" || input_type == "email" || input_type == "url";
+        }
+
+        bool isSingleLineTextInput(Rml::Element* element) {
+            if (!element || element->GetTagName() != "input")
+                return false;
+
+            const auto input_type = element->GetAttribute<Rml::String>("type", "text");
+            return input_type.empty() || input_type == "text" || input_type == "password" ||
+                   input_type == "search" || input_type == "email" || input_type == "url";
+        }
+
         Rml::Input::KeyIdentifier sdlScancodeToRml(int scancode) {
             // clang-format off
             switch (scancode) {
@@ -143,6 +167,7 @@ namespace lfs::vis::gui {
             case SDL_SCANCODE_MINUS:    return Rml::Input::KI_OEM_MINUS;
             case SDL_SCANCODE_KP_PLUS:  return Rml::Input::KI_ADD;
             case SDL_SCANCODE_KP_MINUS: return Rml::Input::KI_SUBTRACT;
+            case SDL_SCANCODE_KP_ENTER: return Rml::Input::KI_NUMPADENTER;
             default: break;
             }
             // clang-format on
@@ -450,6 +475,36 @@ namespace lfs::vis::gui {
         const auto& input = *input_;
         const float mouse_x = input.mouse_x;
         const float mouse_y = input.mouse_y;
+        const auto sync_text_focus = [&]() {
+            const bool want_text = isTextEditableElement(rml_context_->GetFocusElement());
+            if (want_text == has_text_focus_)
+                return;
+
+            has_text_focus_ = want_text;
+            auto* const win = manager_->getWindow();
+            if (has_text_focus_)
+                SDL_StartTextInput(win);
+            else
+                SDL_StopTextInput(win);
+        };
+        const auto flush_pending_text_input = [&]() {
+            if (!has_text_focus_)
+                return;
+
+            auto chars = drainTextInput();
+            if (!chars.empty())
+                had_input = true;
+            for (uint32_t cp : chars)
+                rml_context_->ProcessTextInput(static_cast<Rml::Character>(cp));
+        };
+        const auto blur_focused_text = [&]() {
+            if (auto* const focused = rml_context_->GetFocusElement();
+                isTextEditableElement(focused)) {
+                flush_pending_text_input();
+                focused->Blur();
+            }
+            sync_text_focus();
+        };
 
         float local_x = mouse_x - panel_x;
         float local_y = mouse_y - panel_y;
@@ -501,24 +556,11 @@ namespace lfs::vis::gui {
             if (input.mouse_wheel != 0.0f)
                 rml_context_->ProcessMouseWheel(Rml::Vector2f(0, -input.mouse_wheel), 0);
 
-            if (input.mouse_clicked[0]) {
-                auto* focused = rml_context_->GetFocusElement();
-                bool want_text = focused && focused->GetTagName() == "input";
-                if (want_text != has_text_focus_) {
-                    has_text_focus_ = want_text;
-                    auto* win = manager_->getWindow();
-                    if (has_text_focus_)
-                        SDL_StartTextInput(win);
-                    else
-                        SDL_StopTextInput(win);
-                }
-            }
+            if (input.mouse_clicked[0])
+                sync_text_focus();
         } else if (input.mouse_clicked[0]) {
-            if (has_text_focus_) {
-                drainTextInput();
-                has_text_focus_ = false;
-                SDL_StopTextInput(manager_->getWindow());
-            }
+            if (has_text_focus_)
+                blur_focused_text();
         }
 
         if (hovered) {
@@ -528,11 +570,8 @@ namespace lfs::vis::gui {
             }
         }
 
-        wants_keyboard_ = has_text_focus_ || (foreground_ && hovered);
-        if (wants_keyboard_)
-            s_frame_wants_keyboard = true;
-
         bool forward_keys = has_text_focus_ || hovered;
+        bool commit_requested = false;
         if (forward_keys) {
             int mods = buildRmlModifiers(input);
             for (int sc : input.keys_pressed) {
@@ -541,6 +580,8 @@ namespace lfs::vis::gui {
                     rml_context_->ProcessKeyDown(rml_key, mods);
                     had_input = true;
                 }
+                if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER)
+                    commit_requested = true;
             }
             for (int sc : input.keys_released) {
                 auto rml_key = sdlScancodeToRml(sc);
@@ -551,12 +592,17 @@ namespace lfs::vis::gui {
             }
         }
 
+        if (commit_requested && isSingleLineTextInput(rml_context_->GetFocusElement()))
+            blur_focused_text();
+
+        sync_text_focus();
+
+        wants_keyboard_ = has_text_focus_ || (foreground_ && hovered);
+        if (wants_keyboard_)
+            s_frame_wants_keyboard = true;
+
         if (has_text_focus_) {
-            auto chars = drainTextInput();
-            if (!chars.empty())
-                had_input = true;
-            for (uint32_t cp : chars)
-                rml_context_->ProcessTextInput(static_cast<Rml::Character>(cp));
+            flush_pending_text_input();
         }
 
         return had_input;
