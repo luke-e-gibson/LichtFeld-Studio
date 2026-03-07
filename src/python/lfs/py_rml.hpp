@@ -147,8 +147,21 @@ namespace lfs::python {
         Rml::ElementDocument* doc_;
     };
 
+    struct DynamicDataField {
+        Rml::Variant value;
+
+        bool operator==(const DynamicDataField& other) const { return value == other.value; }
+    };
+
+    struct DynamicDataRecord {
+        std::map<std::string, DynamicDataField> fields;
+
+        bool operator==(const DynamicDataRecord& other) const { return fields == other.fields; }
+    };
+
     struct DataModelArrayStorage {
         std::map<std::string, std::vector<Rml::String>> string_arrays;
+        std::map<std::string, std::vector<DynamicDataRecord>> record_arrays;
     };
 
     class PyDataModelHandle {
@@ -163,6 +176,7 @@ namespace lfs::python {
         void dirty_all();
         bool is_dirty(const std::string& name);
         void update_string_list(const std::string& name, nb::list items);
+        void update_record_list(const std::string& name, nb::list items);
 
     private:
         Rml::DataModelHandle handle_;
@@ -183,6 +197,7 @@ namespace lfs::python {
         void bind_event(const std::string& name, nb::callable callback);
         void register_transform(const std::string& name, nb::callable func);
         void bind_string_list(const std::string& name);
+        void bind_record_list(const std::string& name);
         PyDataModelHandle get_handle();
 
     private:

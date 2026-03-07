@@ -83,8 +83,9 @@ namespace lfs::core {
     void Scene::flushMutations() {
         if (pending_mutations_ == 0)
             return;
+        const uint32_t mutations = pending_mutations_;
         pending_mutations_ = 0;
-        events::state::SceneChanged{}.emit();
+        events::state::SceneChanged{.mutation_flags = mutations}.emit();
     }
 
     Scene::Transaction::Transaction(Scene& scene) : scene_(scene) {

@@ -241,7 +241,6 @@ namespace lfs::vis::gui {
             ".expand-toggle:hover {{ color: {0}; }}\n"
             ".node-name {{ color: {0}; }}\n"
             ".node-name.training-disabled {{ color: {1}; }}\n"
-            ".node-count {{ color: {1}; }}\n"
             ".rename-input {{ color: {0}; background-color: {2}; border-width: 1dp; border-color: {3}; }}\n"
             ".row-icon {{ image-color: {0}; }}\n",
             text, text_dim, surface, primary, border, row_even, row_odd,

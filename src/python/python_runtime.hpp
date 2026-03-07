@@ -500,17 +500,24 @@ namespace lfs::python {
         void set(core::Scene* scene);
         core::Scene* get() const;
         uint64_t generation() const;
+        uint32_t mutation_flags() const;
+        uint32_t consume_mutation_flags();
         void bump();
+        void set_mutation_flags(uint32_t flags);
 
     private:
         std::atomic<core::Scene*> scene_{nullptr};
         std::atomic<uint64_t> generation_{0};
+        std::atomic<uint32_t> mutation_flags_{0};
     };
 
     LFS_PYTHON_RUNTIME_API void set_application_scene(core::Scene* scene);
     LFS_PYTHON_RUNTIME_API core::Scene* get_application_scene();
     LFS_PYTHON_RUNTIME_API uint64_t get_scene_generation();
+    LFS_PYTHON_RUNTIME_API uint32_t get_scene_mutation_flags();
+    LFS_PYTHON_RUNTIME_API uint32_t consume_scene_mutation_flags();
     LFS_PYTHON_RUNTIME_API void bump_scene_generation();
+    LFS_PYTHON_RUNTIME_API void set_scene_mutation_flags(uint32_t flags);
 
     LFS_PYTHON_RUNTIME_API void set_gil_state_ready(bool ready);
     LFS_PYTHON_RUNTIME_API bool is_gil_state_ready();

@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Scene Graph Panel - RmlUI DOM implementation with retained-mode event delegation."""
+"""Scene Graph Panel - virtualized RmlUI tree backed by a data model."""
 
 import math
-from pathlib import Path
+
 import lichtfeld as lf
 
 from .types import RmlPanel
@@ -12,6 +12,24 @@ from .ui.state import AppState
 TREE_ROW_HEIGHT_DP = 20
 TREE_HEADER_HEIGHT_DP = 24
 TREE_OVERSCAN_ROWS = 10
+SCENE_MODEL_NAME = "scene_panel"
+
+SCENE_MUTATION_NODE_ADDED = 1 << 0
+SCENE_MUTATION_NODE_REMOVED = 1 << 1
+SCENE_MUTATION_NODE_RENAMED = 1 << 2
+SCENE_MUTATION_NODE_REPARENTED = 1 << 3
+SCENE_MUTATION_TRANSFORM_CHANGED = 1 << 4
+SCENE_MUTATION_VISIBILITY_CHANGED = 1 << 5
+SCENE_MUTATION_MODEL_CHANGED = 1 << 6
+SCENE_MUTATION_SELECTION_CHANGED = 1 << 7
+SCENE_MUTATION_CLEARED = 1 << 8
+
+SCENE_STRUCTURAL_MUTATIONS = (
+    SCENE_MUTATION_NODE_ADDED |
+    SCENE_MUTATION_NODE_REMOVED |
+    SCENE_MUTATION_NODE_REPARENTED |
+    SCENE_MUTATION_CLEARED
+)
 
 NODE_TYPE_ICONS = {
     "SPLAT": "splat",
@@ -29,7 +47,6 @@ NODE_TYPE_ICONS = {
     "IMAGE": None,
 }
 
-# Fallback Unicode icons for types without PNG
 NODE_TYPE_UNICODE = {
     "KEYFRAME_GROUP": "\u25c6",
     "KEYFRAME": "\u25c6",
@@ -53,7 +70,12 @@ NODE_TYPE_CSS_CLASS = {
     "IMAGE": "group",
 }
 
-# RmlUI key identifiers (Rml::Input::KeyIdentifier)
+NODE_TYPE_ICON_PATH = {
+    node_type: f"../icon/scene/{icon_name}.png"
+    for node_type, icon_name in NODE_TYPE_ICONS.items()
+    if icon_name
+}
+
 KI_RETURN = 72
 KI_ESCAPE = 81
 KI_DELETE = 99
@@ -74,15 +96,6 @@ def tr(key):
     return result if result else key
 
 
-def _xml_escape(text):
-    return (str(text)
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;")
-            .replace("'", "&#39;"))
-
-
 def _node_type(node):
     return str(node.type).split(".")[-1]
 
@@ -96,14 +109,6 @@ def _can_drag(node_type, parent_is_dataset):
     return node_type in DRAGGABLE_TYPES and not parent_is_dataset
 
 
-def _type_dot_html(node_type):
-    css_cls = NODE_TYPE_CSS_CLASS.get(node_type, "")
-    if NODE_TYPE_ICONS.get(node_type):
-        return f'<span class="color-dot {css_cls}"></span>'
-    unicode_char = NODE_TYPE_UNICODE.get(node_type, "?")
-    return f'<span class="node-icon {css_cls}">{unicode_char}</span>'
-
-
 class ScenePanel(RmlPanel):
     idname = "lfs.scene"
     label = "Scene"
@@ -115,11 +120,16 @@ class ScenePanel(RmlPanel):
         self.doc = None
         self.container = None
         self.filter_input = None
+        self._context_menu = None
+        self._handle = None
+
         self._filter_text = ""
+        self._node_snapshots = {}
+        self._root_ids = []
         self._flat_rows = []
+        self._flat_index_by_id = {}
         self._selected_nodes = set()
         self._click_anchor = None
-        self._visible_node_order = []
         self._committed_node_order = []
         self._prev_selected = set()
         self._scroll_to_node = None
@@ -127,18 +137,39 @@ class ScenePanel(RmlPanel):
         self._collapsed_ids = set()
         self._rename_node = None
         self._rename_buffer = ""
-        self._row_index = 0
-        self._context_menu = None
         self._context_menu_node = None
         self._drag_source = None
+        self._drop_target = None
         self._models_collapsed = False
         self._last_lang = ""
         self._root_count = 0
+        self._scene_has_nodes = False
+        self._top_spacer_height = "0dp"
+        self._bottom_spacer_height = "0dp"
+        self._visible_row_capacity = 0
         self._tree_revision = 0
         self._last_render_key = None
         self._last_scroll_top = -1.0
         self._last_view_h = -1.0
         self._last_ui_scale = 0.0
+
+    def on_bind_model(self, ctx):
+        model = ctx.create_data_model(SCENE_MODEL_NAME)
+        if model is None:
+            return
+
+        model.bind_func("search_placeholder", lambda: tr("scene.search"))
+        model.bind_func("show_tree", lambda: self._scene_has_nodes)
+        model.bind_func("show_empty_state", lambda: not self._scene_has_nodes)
+        model.bind_func("empty_message_primary", lambda: tr("scene.no_data_loaded"))
+        model.bind_func("empty_message_secondary", lambda: tr("scene.use_file_menu"))
+        model.bind_func("models_collapsed", lambda: self._models_collapsed)
+        model.bind_func("models_header_text",
+                        lambda: tr("scene.models").format(self._root_count))
+        model.bind_func("top_spacer_height", lambda: self._top_spacer_height)
+        model.bind_func("bottom_spacer_height", lambda: self._bottom_spacer_height)
+        model.bind_record_list("visible_rows")
+        self._handle = model.get_handle()
 
     def on_load(self, doc):
         self.doc = doc
@@ -148,7 +179,6 @@ class ScenePanel(RmlPanel):
         self._context_menu = doc.get_element_by_id("context-menu")
 
         if self.filter_input:
-            self.filter_input.set_attribute("placeholder", tr("scene.search"))
             self.filter_input.add_event_listener("change", self._on_filter_change)
 
         if self.container:
@@ -172,7 +202,10 @@ class ScenePanel(RmlPanel):
         self._rebuild_tree(force=True)
 
     def on_scene_changed(self, doc):
-        self._rebuild_tree(force=True)
+        del doc
+        mutation_flags = self._scene_mutation_flags()
+        if not self._handle_scene_changed(mutation_flags):
+            self._rebuild_tree(force=True)
 
     def on_update(self, doc):
         dirty = False
@@ -182,8 +215,12 @@ class ScenePanel(RmlPanel):
         cur_lang = lf.ui.get_current_language()
         if cur_lang != self._last_lang:
             self._last_lang = cur_lang
-            if self.filter_input:
-                self.filter_input.set_attribute("placeholder", tr("scene.search"))
+            if self._handle:
+                for name in ("search_placeholder",
+                             "empty_message_primary",
+                             "empty_message_secondary",
+                             "models_header_text"):
+                    self._handle.dirty(name)
             dirty |= self._rebuild_tree(force=True)
 
         current = set(lf.get_selected_node_names())
@@ -192,10 +229,7 @@ class ScenePanel(RmlPanel):
             self._selected_nodes = current
             if current and self._restore_scroll_top is None:
                 self._scroll_to_node = next(iter(current))
-            if self._restore_scroll_top is not None:
-                dirty |= self._update_selection_display()
-            else:
-                dirty |= self._render_tree_window(force=True)
+            dirty |= self._render_tree_window(force=True)
 
         if self.container:
             view_h = self.container.client_height or self.container.offset_height
@@ -209,8 +243,6 @@ class ScenePanel(RmlPanel):
 
         return dirty
 
-    # -- DOM traversal helpers --
-
     def _find_row_from_target(self, target):
         el = target
         while el is not None:
@@ -218,8 +250,6 @@ class ScenePanel(RmlPanel):
                 return el
             el = el.parent()
         return None
-
-    # -- Delegated event handlers --
 
     def _on_tree_click(self, event):
         target = event.target()
@@ -236,7 +266,7 @@ class ScenePanel(RmlPanel):
         if target.is_class_set("expand-toggle"):
             event.stop_propagation()
             target_id = target.get_attribute("data-target", "")
-            self._toggle_expand(target_id, target)
+            self._toggle_expand(target_id)
             return
 
         el = target
@@ -304,31 +334,30 @@ class ScenePanel(RmlPanel):
             self._selected_nodes = {node_name}
             self._click_anchor = node_name
             self._prev_selected = set(self._selected_nodes)
-            self._update_selection_display()
+            self._render_tree_window(force=True)
         self._show_context_menu(node_name, mouse_x, mouse_y)
 
     def _on_tree_dragstart(self, event):
         row = self._find_row_from_target(event.target())
         if row:
             self._drag_source = row.get_attribute("data-node", "")
+            self._set_drop_target(None)
 
     def _on_tree_dragend(self, event):
+        del event
         self._drag_source = None
-        if self.container:
-            for row in self.container.query_selector_all(".drop-target"):
-                row.set_class("drop-target", False)
+        self._set_drop_target(None)
 
     def _on_tree_dragover(self, event):
         row = self._find_row_from_target(event.target())
-        if row:
-            target_name = row.get_attribute("data-node", "")
-            if self._drag_source and target_name != self._drag_source:
-                row.set_class("drop-target", True)
+        if not row:
+            return
+        target_name = row.get_attribute("data-node", "")
+        if self._drag_source and target_name != self._drag_source:
+            self._set_drop_target(target_name)
 
     def _on_tree_dragout(self, event):
-        row = self._find_row_from_target(event.target())
-        if row:
-            row.set_class("drop-target", False)
+        del event
 
     def _on_tree_dragdrop(self, event):
         row = self._find_row_from_target(event.target())
@@ -337,7 +366,7 @@ class ScenePanel(RmlPanel):
             if self._drag_source != target_name:
                 lf.reparent_node(self._drag_source, target_name)
                 self._drag_source = None
-                self._rebuild_tree()
+                self._set_drop_target(None)
 
     def _on_context_menu_click(self, event):
         target = event.target()
@@ -354,8 +383,6 @@ class ScenePanel(RmlPanel):
                 return
             el = el.parent()
 
-    # -- Inline action handlers --
-
     def _handle_inline_action(self, action, node_name):
         scene = lf.get_scene()
         if not scene:
@@ -365,25 +392,10 @@ class ScenePanel(RmlPanel):
             if node:
                 new_visible = not node.visible
                 lf.set_node_visibility(node_name, new_visible)
-                self._update_vis_icon(node_name, new_visible)
+                if self._set_row_visibility_state(node_name, new_visible):
+                    self._render_tree_window(force=True)
 
-    def _update_vis_icon(self, node_name, visible):
-        if not self.container:
-            return
-        row = self.container.query_selector(f'[data-node="{node_name}"]')
-        if not row:
-            return
-        vis = row.query_selector("[data-action='toggle-vis']")
-        if not vis:
-            return
-        if visible:
-            vis.set_class_names("row-icon icon-vis-on")
-            vis.set_attribute("sprite", "icon-visible")
-        else:
-            vis.set_class_names("row-icon icon-vis-off")
-            vis.set_attribute("sprite", "icon-hidden")
-
-    def _toggle_expand(self, target_id, toggle_el):
+    def _toggle_expand(self, target_id):
         if not target_id:
             return
         try:
@@ -394,13 +406,16 @@ class ScenePanel(RmlPanel):
             self._collapsed_ids.discard(nid)
         else:
             self._collapsed_ids.add(nid)
-        self._rebuild_tree(force=True)
+        if not self._apply_expand_toggle(nid):
+            self._rebuild_tree(force=True)
+            return
+        self._mark_tree_dirty()
+        self._render_tree_window(force=True)
 
     def _toggle_models_section(self):
         self._models_collapsed = not self._models_collapsed
-        self._rebuild_tree(force=True)
-
-    # -- Keyboard handling --
+        self._last_render_key = None
+        self._render_tree_window(force=True)
 
     def _on_keydown(self, event):
         key = int(event.get_parameter("key_identifier", "0"))
@@ -411,10 +426,11 @@ class ScenePanel(RmlPanel):
                 scene = lf.get_scene()
                 if scene:
                     node = scene.get_node(name)
-                    if node and _is_deletable(_node_type(node), self._check_parent_dataset(scene, node)):
+                    if node and _is_deletable(_node_type(node),
+                                              self._check_parent_dataset(scene, node)):
                         self._rename_node = name
                         self._rename_buffer = name
-                        self._rebuild_tree()
+                        self._render_tree_window(force=True)
             event.stop_propagation()
 
         elif key == KI_DELETE:
@@ -428,22 +444,23 @@ class ScenePanel(RmlPanel):
         elif key == KI_ESCAPE:
             if self._rename_node:
                 self._rename_node = None
-                self._rebuild_tree()
+                self._rename_buffer = ""
+                self._render_tree_window(force=True)
             self._hide_context_menu()
             event.stop_propagation()
 
     def _on_body_click(self, event):
+        del event
         self._hide_context_menu()
 
     def _on_filter_change(self, event):
+        del event
         if self.filter_input:
             self._filter_text = self.filter_input.get_attribute("value") or ""
         self._rebuild_tree(force=True)
 
     def _preserve_scroll_for_local_selection(self):
         self._restore_scroll_top = self.container.scroll_top if self.container else None
-
-    # -- Tree building --
 
     def _ui_scale(self):
         try:
@@ -458,27 +475,33 @@ class ScenePanel(RmlPanel):
         return TREE_HEADER_HEIGHT_DP * self._ui_scale()
 
     def _current_header_height_px(self):
-        if self.doc:
+        if self.doc and self._scene_has_nodes:
             header = self.doc.get_element_by_id("models-header")
             if header:
                 return max(header.offset_height, self._default_header_height_px())
         return self._default_header_height_px()
 
+    def _format_row_span_height(self, row_count):
+        return f"{max(0, row_count) * TREE_ROW_HEIGHT_DP}dp"
+
+    def _get_active_rename_input(self):
+        if not self.container or not self._rename_node:
+            return None
+        for rename_el in self.container.query_selector_all(".rename-input"):
+            row = self._find_row_from_target(rename_el)
+            if row and row.get_attribute("data-node", "") == self._rename_node:
+                return rename_el
+        return None
+
     def _capture_rename_buffer(self):
         if not self.doc or not self._rename_node:
             return
-        rename_el = self.doc.get_element_by_id("rename-input")
+        rename_el = self._get_active_rename_input()
         if rename_el:
-            self._rename_buffer = rename_el.get_attribute("value", self._rename_buffer or self._rename_node)
+            self._rename_buffer = rename_el.get_attribute(
+                "value", self._rename_buffer or self._rename_node)
 
-    def _build_header_html(self):
-        arrow = "\u25BC" if not self._models_collapsed else "\u25B6"
-        header_text = _xml_escape(tr("scene.models").format(self._root_count))
-        return f'<div class="section-header" id="models-header">{arrow} {header_text}</div>'
-
-    def _make_row_state(self, scene, node, depth):
-        node_type = _node_type(node)
-        parent_is_dataset = self._check_parent_dataset(scene, node)
+    def _format_node_label(self, node, node_type):
         label = node.name
         if node_type == "SPLAT" and node.gaussian_count > 0:
             label += f"  ({node.gaussian_count:,})"
@@ -493,84 +516,289 @@ class ScenePanel(RmlPanel):
         elif node_type == "KEYFRAME":
             keyframe = node.keyframe_data()
             if keyframe:
-                label = tr("scene.keyframe_label").format(index=keyframe.keyframe_index + 1, time=keyframe.time)
+                label = tr("scene.keyframe_label").format(
+                    index=keyframe.keyframe_index + 1, time=keyframe.time)
+        return label
 
+    def _make_node_snapshot(self, node):
+        node_type = _node_type(node)
         return {
             "name": node.name,
             "id": node.id,
+            "parent_id": node.parent_id,
+            "children": tuple(node.children),
             "node_type": node_type,
-            "depth": depth,
             "visible": bool(node.visible),
-            "selected": node.name in self._selected_nodes,
             "has_children": len(node.children) > 0,
-            "collapsed": node.id in self._collapsed_ids,
-            "draggable": _can_drag(node_type, parent_is_dataset),
             "training_enabled": bool(getattr(node, "training_enabled", True)),
-            "label": label,
+            "label": self._format_node_label(node, node_type),
+            "draggable": False,
         }
 
-    def _append_rows(self, scene, node, depth, rows):
-        child_rows = []
-        for child_id in node.children:
-            child = scene.get_node_by_id(child_id)
-            if child:
-                self._append_rows(scene, child, depth + 1, child_rows)
+    def _capture_scene_snapshot(self, scene):
+        nodes = scene.get_nodes()
+        snapshots = {}
+        for node in nodes:
+            snapshots[node.id] = self._make_node_snapshot(node)
 
-        if self._filter_text and self._filter_text.lower() not in node.name.lower():
+        for snapshot in snapshots.values():
+            parent = snapshots.get(snapshot["parent_id"])
+            snapshot["draggable"] = _can_drag(
+                snapshot["node_type"],
+                bool(parent and parent["node_type"] == "DATASET"))
+
+        root_ids = [node.id for node in nodes if node.parent_id == -1]
+        return snapshots, root_ids
+
+    def _make_row_state(self, snapshot, depth):
+        return {
+            "name": snapshot["name"],
+            "id": snapshot["id"],
+            "node_type": snapshot["node_type"],
+            "depth": depth,
+            "visible": snapshot["visible"],
+            "has_children": snapshot["has_children"],
+            "collapsed": snapshot["id"] in self._collapsed_ids,
+            "draggable": snapshot["draggable"],
+            "training_enabled": snapshot["training_enabled"],
+            "label": snapshot["label"],
+        }
+
+    def _append_snapshot_rows(self, node_id, depth, rows, filter_text_lower):
+        snapshot = self._node_snapshots.get(node_id)
+        if not snapshot:
+            return
+
+        child_rows = []
+        for child_id in snapshot["children"]:
+            self._append_snapshot_rows(child_id, depth + 1, child_rows, filter_text_lower)
+
+        if filter_text_lower and filter_text_lower not in snapshot["name"].lower():
             rows.extend(child_rows)
             return
 
-        row = self._make_row_state(scene, node, depth)
+        row = self._make_row_state(snapshot, depth)
         rows.append(row)
         if row["has_children"] and not row["collapsed"]:
             rows.extend(child_rows)
 
-    def _build_row_html(self, row, absolute_index):
-        parity = "even" if absolute_index % 2 == 0 else "odd"
-        selected_cls = " selected" if row["selected"] else ""
-        drag_attr = ' drag="drag-drop"' if row["draggable"] else ""
-        indent_px = row["depth"] * 16
-        indent_style = f' style="padding-left: {indent_px}dp"' if indent_px > 0 else ""
-        html = (f'<div class="tree-row {parity}{selected_cls}" data-node="{_xml_escape(row["name"])}" '
-                f'data-id="{row["id"]}" data-type="{row["node_type"]}"{drag_attr}{indent_style}>')
-        html += '<span class="row-content">'
+    def _append_visible_subtree_rows(self, node_id, depth, rows):
+        snapshot = self._node_snapshots.get(node_id)
+        if not snapshot:
+            return
 
-        if row["visible"]:
-            html += (f'<img class="row-icon icon-vis-on" sprite="icon-visible" '
-                     f'data-action="toggle-vis" data-node="{_xml_escape(row["name"])}" />')
+        row = self._make_row_state(snapshot, depth)
+        rows.append(row)
+        if row["has_children"] and not row["collapsed"]:
+            for child_id in snapshot["children"]:
+                self._append_visible_subtree_rows(child_id, depth + 1, rows)
+
+    def _make_visible_row_state(self, row, absolute_index):
+        node_type = row["node_type"]
+        type_icon_src = NODE_TYPE_ICON_PATH.get(node_type, "")
+        use_type_icon = bool(type_icon_src)
+        unicode_icon = NODE_TYPE_UNICODE.get(node_type, "")
+        renaming = self._rename_node == row["name"]
+        return {
+            "present": True,
+            "name": row["name"],
+            "id": row["id"],
+            "node_type": node_type,
+            "selected": row["name"] in self._selected_nodes,
+            "even": absolute_index % 2 == 0,
+            "has_children": row["has_children"],
+            "collapsed": row["collapsed"],
+            "visible": row["visible"],
+            "label": row["label"],
+            "indent": f"{row['depth'] * 16}dp",
+            "type_class": NODE_TYPE_CSS_CLASS.get(node_type, ""),
+            "use_type_icon": use_type_icon,
+            "type_icon_src": type_icon_src,
+            "use_unicode_icon": not use_type_icon and bool(unicode_icon),
+            "unicode_icon": unicode_icon or "?",
+            "expand_glyph": "\u25B6" if row["collapsed"] else "\u25BC",
+            "children_target": f"children-{row['id']}",
+            "vis_sprite": "icon-visible" if row["visible"] else "icon-hidden",
+            "drag_mode": "drag-drop" if row["draggable"] else "none",
+            "camera_training_disabled": node_type == "CAMERA" and not row["training_enabled"],
+            "renaming": renaming,
+            "rename_value": self._rename_buffer if renaming else "",
+            "drop_target": self._drop_target == row["name"],
+        }
+
+    def _make_placeholder_row(self, absolute_index):
+        return {
+            "present": False,
+            "name": "",
+            "id": -1,
+            "node_type": "",
+            "selected": False,
+            "even": absolute_index % 2 == 0,
+            "has_children": False,
+            "collapsed": False,
+            "visible": False,
+            "label": "",
+            "indent": "0dp",
+            "type_class": "",
+            "use_type_icon": False,
+            "type_icon_src": "",
+            "use_unicode_icon": False,
+            "unicode_icon": "",
+            "expand_glyph": "",
+            "children_target": "",
+            "vis_sprite": "icon-hidden",
+            "drag_mode": "none",
+            "camera_training_disabled": False,
+            "renaming": False,
+            "rename_value": "",
+            "drop_target": False,
+        }
+
+    def _set_row_visibility_state(self, node_name, visible):
+        for row in self._flat_rows:
+            if row["name"] == node_name:
+                if row["visible"] == visible:
+                    return False
+                row["visible"] = visible
+                snapshot = self._node_snapshots.get(row["id"])
+                if snapshot:
+                    snapshot["visible"] = visible
+                self._mark_tree_dirty()
+                return True
+        return False
+
+    def _set_drop_target(self, node_name):
+        if node_name == self._drop_target:
+            return False
+        self._drop_target = node_name
+        self._last_render_key = None
+        return self._render_tree_window(force=True)
+
+    def _mark_tree_dirty(self):
+        self._tree_revision += 1
+        self._last_render_key = None
+
+    def _reindex_flat_rows(self):
+        self._flat_index_by_id = {
+            row["id"]: index
+            for index, row in enumerate(self._flat_rows)
+        }
+        self._committed_node_order = [row["name"] for row in self._flat_rows]
+
+    def _remap_name_state(self, renamed):
+        if not renamed:
+            return
+
+        self._selected_nodes = {renamed.get(name, name) for name in self._selected_nodes}
+        self._prev_selected = {renamed.get(name, name) for name in self._prev_selected}
+
+        if self._click_anchor in renamed:
+            self._click_anchor = renamed[self._click_anchor]
+        if self._scroll_to_node in renamed:
+            self._scroll_to_node = renamed[self._scroll_to_node]
+        if self._rename_node in renamed:
+            self._rename_node = renamed[self._rename_node]
+        if self._context_menu_node in renamed:
+            self._context_menu_node = renamed[self._context_menu_node]
+        if self._drag_source in renamed:
+            self._drag_source = renamed[self._drag_source]
+        if self._drop_target in renamed:
+            self._drop_target = renamed[self._drop_target]
+
+    def _refresh_flat_rows_from_snapshot(self):
+        renamed = {}
+        for row in self._flat_rows:
+            snapshot = self._node_snapshots.get(row["id"])
+            if not snapshot:
+                return False
+            old_name = row["name"]
+            row.update(self._make_row_state(snapshot, row["depth"]))
+            if old_name != row["name"]:
+                renamed[old_name] = row["name"]
+
+        self._remap_name_state(renamed)
+        self._reindex_flat_rows()
+        self._mark_tree_dirty()
+        return True
+
+    def _refresh_tree_content(self, scene):
+        if not self._node_snapshots:
+            return False
+
+        snapshots, root_ids = self._capture_scene_snapshot(scene)
+        if set(snapshots) != set(self._node_snapshots):
+            return False
+        if root_ids != self._root_ids:
+            return False
+
+        for node_id, snapshot in snapshots.items():
+            previous = self._node_snapshots.get(node_id)
+            if previous is None:
+                return False
+            if (previous["parent_id"] != snapshot["parent_id"] or
+                    previous["children"] != snapshot["children"] or
+                    previous["node_type"] != snapshot["node_type"]):
+                return False
+
+        self._node_snapshots = snapshots
+        self._root_ids = root_ids
+        self._root_count = len(root_ids)
+        self._scene_has_nodes = bool(root_ids)
+        if not self._refresh_flat_rows_from_snapshot():
+            return False
+        return self._render_tree_window(force=True)
+
+    def _handle_scene_changed(self, mutation_flags):
+        scene = lf.get_scene()
+        if scene is None or not scene.has_nodes():
+            return False
+        if mutation_flags == 0:
+            return False
+        if mutation_flags in (SCENE_MUTATION_SELECTION_CHANGED,
+                              SCENE_MUTATION_TRANSFORM_CHANGED):
+            return True
+        if mutation_flags & SCENE_STRUCTURAL_MUTATIONS:
+            return False
+        if self._filter_text and mutation_flags & SCENE_MUTATION_NODE_RENAMED:
+            return False
+        return self._refresh_tree_content(scene)
+
+    def _apply_expand_toggle(self, node_id):
+        if self._filter_text or node_id not in self._flat_index_by_id:
+            return False
+
+        row_index = self._flat_index_by_id[node_id]
+        row = self._flat_rows[row_index]
+        snapshot = self._node_snapshots.get(node_id)
+        if not snapshot or not row["has_children"]:
+            return False
+
+        row["collapsed"] = node_id in self._collapsed_ids
+        if row["collapsed"]:
+            end = row_index + 1
+            while end < len(self._flat_rows) and self._flat_rows[end]["depth"] > row["depth"]:
+                end += 1
+            del self._flat_rows[row_index + 1:end]
         else:
-            html += (f'<img class="row-icon icon-vis-off" sprite="icon-hidden" '
-                     f'data-action="toggle-vis" data-node="{_xml_escape(row["name"])}" />')
+            inserted_rows = []
+            for child_id in snapshot["children"]:
+                self._append_visible_subtree_rows(child_id, row["depth"] + 1, inserted_rows)
+            if inserted_rows:
+                self._flat_rows[row_index + 1:row_index + 1] = inserted_rows
 
-        html += _type_dot_html(row["node_type"])
-
-        if row["has_children"]:
-            arrow = "\u25B6" if row["collapsed"] else "\u25BC"
-            html += f'<span class="expand-toggle" data-target="children-{row["id"]}">{arrow}</span>'
-        else:
-            html += '<span class="leaf-spacer"></span>'
-
-        if self._rename_node and row["name"] == self._rename_node:
-            value = _xml_escape(self._rename_buffer or row["name"])
-            html += f'<input class="rename-input" id="rename-input" type="text" value="{value}" />'
-        else:
-            label_cls = "node-name"
-            if row["node_type"] == "CAMERA" and not row["training_enabled"]:
-                label_cls += " training-disabled"
-            html += f'<span class="{label_cls}">{_xml_escape(row["label"])}</span>'
-
-        html += '</span></div>'
-        return html
+        self._reindex_flat_rows()
+        return True
 
     def _render_tree_window(self, force=False):
-        if not self.container:
+        if not self.container or not self._handle:
             return False
 
         row_height = self._row_height_px()
         viewport_h = self.container.client_height or self.container.offset_height or row_height
-        header_h = self._current_header_height_px()
+        header_h = self._current_header_height_px() if self._scene_has_nodes else 0.0
         current_scroll_top = self.container.scroll_top
-        scroll_top = self._restore_scroll_top if self._restore_scroll_top is not None else current_scroll_top
+        scroll_top = (self._restore_scroll_top
+                      if self._restore_scroll_top is not None else current_scroll_top)
 
         if self._scroll_to_node and self._scroll_to_node in self._committed_node_order:
             index = self._committed_node_order.index(self._scroll_to_node)
@@ -582,17 +810,24 @@ class ScenePanel(RmlPanel):
                 scroll_top = row_bottom - viewport_h
 
         total_rows = len(self._flat_rows)
-        total_content_h = header_h if self._models_collapsed else header_h + total_rows * row_height
-        max_scroll_top = max(0.0, total_content_h - viewport_h)
-        scroll_top = min(max(0.0, scroll_top), max_scroll_top)
-        if self._models_collapsed:
+        if not self._scene_has_nodes:
             start = 0
             end = 0
+            scroll_top = 0.0
         else:
-            rows_scroll_top = max(0.0, scroll_top - header_h)
-            start = max(0, int(rows_scroll_top // row_height) - TREE_OVERSCAN_ROWS)
-            visible_count = max(1, int(math.ceil(viewport_h / row_height)) + TREE_OVERSCAN_ROWS * 2)
-            end = min(total_rows, start + visible_count)
+            total_content_h = (header_h if self._models_collapsed
+                               else header_h + total_rows * row_height)
+            max_scroll_top = max(0.0, total_content_h - viewport_h)
+            scroll_top = min(max(0.0, scroll_top), max_scroll_top)
+            if self._models_collapsed:
+                start = 0
+                end = 0
+            else:
+                rows_scroll_top = max(0.0, scroll_top - header_h)
+                start = max(0, int(rows_scroll_top // row_height) - TREE_OVERSCAN_ROWS)
+                visible_count = max(
+                    1, int(math.ceil(viewport_h / row_height)) + TREE_OVERSCAN_ROWS * 2)
+                end = min(total_rows, start + visible_count)
 
         render_key = (
             self._tree_revision,
@@ -600,8 +835,8 @@ class ScenePanel(RmlPanel):
             self._models_collapsed,
             self._rename_node,
             self._rename_buffer,
-            int(round(viewport_h)),
-            int(round(scroll_top)),
+            self._scene_has_nodes,
+            self._drop_target or "",
             start,
             end,
         )
@@ -616,16 +851,31 @@ class ScenePanel(RmlPanel):
             self._scroll_to_node = None
             return abs(scroll_top - current_scroll_top) > 0.5
 
-        html = self._build_header_html()
-        if not self._models_collapsed and total_rows > 0:
-            top_spacer = start * row_height
-            bottom_spacer = max(0.0, (total_rows - end) * row_height)
-            html += f'<div class="virtual-spacer" style="height: {top_spacer:.0f}px"></div>'
+        visible_rows = []
+        should_render_rows = self._scene_has_nodes and not self._models_collapsed
+        if should_render_rows:
             for absolute_index in range(start, end):
-                html += self._build_row_html(self._flat_rows[absolute_index], absolute_index)
-            html += f'<div class="virtual-spacer" style="height: {bottom_spacer:.0f}px"></div>'
+                visible_rows.append(
+                    self._make_visible_row_state(self._flat_rows[absolute_index], absolute_index))
+            self._visible_row_capacity = max(self._visible_row_capacity, len(visible_rows))
+            while len(visible_rows) < self._visible_row_capacity:
+                visible_rows.append(self._make_placeholder_row(start + len(visible_rows)))
+            self._top_spacer_height = self._format_row_span_height(start)
+            self._bottom_spacer_height = self._format_row_span_height(total_rows - end)
+        else:
+            self._visible_row_capacity = 0
+            self._top_spacer_height = "0dp"
+            self._bottom_spacer_height = "0dp"
 
-        self.container.set_inner_rml(html)
+        self._handle.update_record_list("visible_rows", visible_rows)
+        for name in ("show_tree",
+                     "show_empty_state",
+                     "models_collapsed",
+                     "models_header_text",
+                     "top_spacer_height",
+                     "bottom_spacer_height"):
+            self._handle.dirty(name)
+
         if abs(scroll_top - current_scroll_top) > 0.5 or self._restore_scroll_top is not None:
             self.container.scroll_top = scroll_top
 
@@ -643,44 +893,40 @@ class ScenePanel(RmlPanel):
         if not self.container:
             return False
 
+        self._drop_target = None
         scene = lf.get_scene()
         if scene is None or not scene.has_nodes():
+            self._scene_has_nodes = False
+            self._node_snapshots = {}
+            self._root_ids = []
             self._flat_rows = []
+            self._flat_index_by_id = {}
             self._committed_node_order = []
-            self._visible_node_order = []
             self._root_count = 0
-            self._tree_revision += 1
-            self._last_render_key = None
-            self.container.set_inner_rml(
-                '<div class="empty-message">' + _xml_escape(tr("scene.no_data_loaded")) + '</div>'
-                '<div class="empty-message">' + _xml_escape(tr("scene.use_file_menu")) + '</div>'
-            )
-            return True
+            self._mark_tree_dirty()
+            return self._render_tree_window(force=True)
 
-        nodes = scene.get_nodes()
-        self._root_count = sum(1 for n in nodes if n.parent_id == -1)
+        self._node_snapshots, self._root_ids = self._capture_scene_snapshot(scene)
+        self._scene_has_nodes = True
+        self._root_count = len(self._root_ids)
         self._selected_nodes = set(lf.get_selected_node_names())
         rows = []
-        for node in nodes:
-            if node.parent_id == -1:
-                self._append_rows(scene, node, 0, rows)
+        filter_text_lower = self._filter_text.lower()
+        for node_id in self._root_ids:
+            self._append_snapshot_rows(node_id, 0, rows, filter_text_lower)
 
         self._flat_rows = rows
-        self._visible_node_order = [row["name"] for row in rows]
-        self._committed_node_order = list(self._visible_node_order)
-        self._tree_revision += 1
-        self._last_render_key = None
+        self._reindex_flat_rows()
+        self._mark_tree_dirty()
         return self._render_tree_window(force=True)
 
     def _setup_rename_input(self):
         if not self._rename_node or not self.doc:
             return
-        rename_el = self.doc.get_element_by_id("rename-input")
+        rename_el = self._get_active_rename_input()
         if rename_el:
             rename_el.focus()
             rename_el.add_event_listener("keydown", self._on_rename_keydown)
-
-    # -- Rename --
 
     def _on_rename_keydown(self, event):
         key = int(event.get_parameter("key_identifier", "0"))
@@ -700,14 +946,12 @@ class ScenePanel(RmlPanel):
             lf.rename_node(self._rename_node, new_name)
         self._rename_node = None
         self._rename_buffer = ""
-        self._rebuild_tree(force=True)
+        self._render_tree_window(force=True)
 
     def _cancel_rename(self):
         self._rename_node = None
         self._rename_buffer = ""
-        self._rebuild_tree(force=True)
-
-    # -- Selection --
+        self._render_tree_window(force=True)
 
     def _handle_click(self, node_name):
         self._hide_context_menu()
@@ -715,12 +959,11 @@ class ScenePanel(RmlPanel):
         shift = lf.ui.is_shift_down()
 
         if ctrl:
+            self._preserve_scroll_for_local_selection()
             if node_name in self._selected_nodes:
-                self._preserve_scroll_for_local_selection()
                 self._selected_nodes.discard(node_name)
                 lf.select_nodes(list(self._selected_nodes))
             else:
-                self._preserve_scroll_for_local_selection()
                 lf.add_to_selection(node_name)
                 self._selected_nodes.add(node_name)
             self._click_anchor = node_name
@@ -738,7 +981,7 @@ class ScenePanel(RmlPanel):
             self._click_anchor = node_name
 
         self._prev_selected = set(self._selected_nodes)
-        self._update_selection_display()
+        self._render_tree_window(force=True)
 
     def _get_range(self, a, b):
         order = self._committed_node_order
@@ -749,32 +992,6 @@ class ScenePanel(RmlPanel):
         lo, hi = min(ia, ib), max(ia, ib)
         return order[lo:hi + 1]
 
-    def _update_selection_display(self):
-        if not self.container:
-            return False
-
-        dirty = False
-        for row in self.container.query_selector_all(".tree-row"):
-            node_name = row.get_attribute("data-node", "")
-            selected = node_name in self._selected_nodes
-            if row.is_class_set("selected") != selected:
-                row.set_class("selected", selected)
-                dirty = True
-
-        if self._restore_scroll_top is not None:
-            if abs(self.container.scroll_top - self._restore_scroll_top) > 0.5:
-                self.container.scroll_top = self._restore_scroll_top
-                dirty = True
-            self._restore_scroll_top = None
-
-        self._scroll_to_node = None
-        return dirty
-
-    def _do_scroll(self):
-        if not self._scroll_to_node:
-            return
-        self._render_tree_window(force=True)
-
     def _check_parent_dataset(self, scene, node):
         if node.parent_id != -1:
             parent = scene.get_node_by_id(node.parent_id)
@@ -782,7 +999,11 @@ class ScenePanel(RmlPanel):
                 return True
         return False
 
-    # -- Context menu --
+    def _scene_mutation_flags(self):
+        try:
+            return int(lf.consume_scene_mutation_flags())
+        except (AttributeError, RuntimeError, TypeError, ValueError):
+            return 0
 
     def _show_context_menu(self, node_name, mouse_x="0", mouse_y="0"):
         if not self._context_menu or not self.doc:
@@ -957,8 +1178,6 @@ class ScenePanel(RmlPanel):
             self._context_menu.set_class("visible", False)
             self._context_menu_node = None
 
-    # -- Action execution --
-
     def _execute_action(self, action_str):
         if not action_str:
             return
@@ -975,12 +1194,14 @@ class ScenePanel(RmlPanel):
             node = scene.get_node(arg) if scene else None
             if node:
                 node.training_enabled = True
-                self._rebuild_tree()
+                if not self._refresh_tree_content(scene):
+                    self._rebuild_tree(force=True)
         elif action == "disable_train":
             node = scene.get_node(arg) if scene else None
             if node:
                 node.training_enabled = False
-                self._rebuild_tree()
+                if not self._refresh_tree_content(scene):
+                    self._rebuild_tree(force=True)
         elif action == "go_to_kf":
             lf.ui.go_to_keyframe(int(arg))
         elif action == "update_kf":
@@ -1001,7 +1222,7 @@ class ScenePanel(RmlPanel):
         elif action == "rename":
             self._rename_node = arg
             self._rename_buffer = arg
-            self._rebuild_tree()
+            self._render_tree_window(force=True)
         elif action == "duplicate":
             lf.ui.duplicate_node(arg)
         elif action == "add_group":
@@ -1040,9 +1261,6 @@ class ScenePanel(RmlPanel):
             reparent_parts = arg.split(":", 1)
             if len(reparent_parts) == 2:
                 lf.reparent_node(reparent_parts[0], reparent_parts[1])
-                self._rebuild_tree()
-
-    # -- Bulk operations --
 
     def _toggle_children_training(self, scene, group_name, enabled):
         if not scene:
@@ -1054,7 +1272,8 @@ class ScenePanel(RmlPanel):
             child = scene.get_node_by_id(child_id)
             if child and _node_type(child) == "CAMERA":
                 child.training_enabled = enabled
-        self._rebuild_tree()
+        if not self._refresh_tree_content(scene):
+            self._rebuild_tree(force=True)
 
     def _toggle_selected_training(self, scene, enabled):
         if not scene:
@@ -1071,7 +1290,8 @@ class ScenePanel(RmlPanel):
                     child = scene.get_node_by_id(child_id)
                     if child and _node_type(child) == "CAMERA":
                         child.training_enabled = enabled
-        self._rebuild_tree()
+        if not self._refresh_tree_content(scene):
+            self._rebuild_tree(force=True)
 
     def _delete_selected(self, scene):
         if not scene:

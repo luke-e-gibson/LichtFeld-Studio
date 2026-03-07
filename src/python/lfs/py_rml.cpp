@@ -8,21 +8,131 @@
 
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Context.h>
+#include <RmlUi/Core/DataTypeRegister.h>
+#include <RmlUi/Core/DataVariable.h>
 #include <cassert>
 #include <cmath>
 #include <nanobind/stl/optional.h>
+#include <nanobind/stl/map.h>
 #include <unordered_set>
 
 namespace lfs::python {
 
     void register_builtin_transforms(Rml::DataModelConstructor& ctor);
+    nb::object variant_to_python(const Rml::Variant& v);
+    Rml::Variant python_to_variant(const nb::handle& obj);
 
     namespace {
         std::unordered_map<Rml::ElementDocument*, std::vector<Rml::ElementPtr>> s_held_elements;
         std::unordered_set<Rml::ElementDocument*> s_dirty_documents;
         std::map<std::string, DataModelArrayStorage> s_model_storage;
         std::unordered_map<std::string, Rml::DataModelHandle> s_active_handles;
-        bool s_string_array_type_registered = false;
+        std::unordered_set<Rml::Context*> s_string_array_type_contexts;
+        std::unordered_set<Rml::Context*> s_record_array_type_contexts;
+        std::unordered_map<Rml::Context*, class DynamicRecordDefinition*> s_record_definitions;
+
+        class DynamicFieldDefinition final : public Rml::VariableDefinition {
+        public:
+            DynamicFieldDefinition() : Rml::VariableDefinition(Rml::DataVariableType::Scalar) {}
+
+            bool Get(void* ptr, Rml::Variant& variant) override {
+                if (!ptr)
+                    return false;
+                variant = static_cast<DynamicDataField*>(ptr)->value;
+                return true;
+            }
+
+            bool Set(void* ptr, const Rml::Variant& variant) override {
+                if (!ptr)
+                    return false;
+                static_cast<DynamicDataField*>(ptr)->value = variant;
+                return true;
+            }
+        };
+
+        class DynamicRecordDefinition final : public Rml::VariableDefinition {
+        public:
+            DynamicRecordDefinition() : Rml::VariableDefinition(Rml::DataVariableType::Struct) {}
+
+            Rml::DataVariable Child(void* ptr, const Rml::DataAddressEntry& address) override {
+                if (!ptr || address.name.empty())
+                    return {};
+
+                auto* record = static_cast<DynamicDataRecord*>(ptr);
+                auto it = record->fields.find(address.name);
+                if (it == record->fields.end())
+                    return {};
+
+                return Rml::DataVariable(&field_definition_, &it->second);
+            }
+
+            Rml::StringList ReflectMemberNames() override {
+                return member_names_;
+            }
+
+            void note_member(const std::string& name) {
+                if (name.empty() || member_name_set_.contains(name))
+                    return;
+                member_name_set_.insert(name);
+                member_names_.push_back(name);
+            }
+
+        private:
+            DynamicFieldDefinition field_definition_;
+            std::unordered_set<std::string> member_name_set_;
+            Rml::StringList member_names_;
+        };
+
+        DynamicRecordDefinition* ensure_record_types_registered(
+            Rml::DataModelConstructor& ctor, Rml::Context* context) {
+            if (!context)
+                return nullptr;
+
+            auto def_it = s_record_definitions.find(context);
+            if (def_it == s_record_definitions.end()) {
+                auto record_definition = Rml::MakeUnique<DynamicRecordDefinition>();
+                auto* raw_definition = record_definition.get();
+                const bool registered =
+                    ctor.RegisterCustomDataVariableDefinition<DynamicDataRecord>(
+                        std::move(record_definition));
+                if (!registered)
+                    return nullptr;
+                def_it = s_record_definitions.emplace(context, raw_definition).first;
+            }
+
+            if (!s_record_array_type_contexts.contains(context)) {
+                if (!ctor.RegisterArray<std::vector<DynamicDataRecord>>())
+                    return nullptr;
+                s_record_array_type_contexts.insert(context);
+            }
+
+            return def_it->second;
+        }
+
+        DynamicRecordDefinition* get_record_definition(Rml::Context* context) {
+            if (!context)
+                return nullptr;
+            auto it = s_record_definitions.find(context);
+            return it != s_record_definitions.end() ? it->second : nullptr;
+        }
+
+        DynamicDataRecord python_to_record(const nb::handle& item, Rml::Context* context) {
+            DynamicDataRecord record;
+            if (!nb::isinstance<nb::dict>(item))
+                return record;
+
+            auto* record_definition = get_record_definition(context);
+            nb::dict dict = nb::cast<nb::dict>(item);
+            for (auto kv : dict) {
+                std::string key = nb::cast<std::string>(kv.first);
+                if (record_definition)
+                    record_definition->note_member(key);
+                record.fields.emplace(
+                    std::move(key),
+                    DynamicDataField{python_to_variant(kv.second)});
+            }
+            return record;
+        }
 
         void mark_document_dirty(Rml::Element* element) {
             if (!element)
@@ -401,11 +511,30 @@ namespace lfs::python {
         assert(model_it != s_model_storage.end());
         auto arr_it = model_it->second.string_arrays.find(name);
         assert(arr_it != model_it->second.string_arrays.end());
-        auto& vec = arr_it->second;
-        vec.clear();
-        vec.reserve(nb::len(items));
+        std::vector<Rml::String> updated;
+        updated.reserve(nb::len(items));
         for (auto item : items)
-            vec.push_back(nb::cast<std::string>(item));
+            updated.push_back(nb::cast<std::string>(item));
+        if (updated == arr_it->second)
+            return;
+        arr_it->second = std::move(updated);
+        handle_.DirtyVariable(name);
+    }
+
+    void PyDataModelHandle::update_record_list(const std::string& name, nb::list items) {
+        auto model_it = s_model_storage.find(model_name_);
+        assert(model_it != s_model_storage.end());
+        auto arr_it = model_it->second.record_arrays.find(name);
+        assert(arr_it != model_it->second.record_arrays.end());
+
+        std::vector<DynamicDataRecord> updated;
+        updated.reserve(nb::len(items));
+        for (auto item : items)
+            updated.push_back(python_to_record(item, context_));
+
+        if (updated == arr_it->second)
+            return;
+        arr_it->second = std::move(updated);
         handle_.DirtyVariable(name);
     }
 
@@ -452,16 +581,18 @@ namespace lfs::python {
         nb::callable cb = nb::borrow<nb::callable>(callback);
         prevent_gc_.push_back(nb::object(cb));
         const auto model_name = model_name_;
+        auto* context = context_;
 
         ctor_.BindEventCallback(
-            name, [cb, model_name](Rml::DataModelHandle handle, Rml::Event& event,
-                                   const Rml::VariantList& args) {
+            name, [cb, model_name, context](Rml::DataModelHandle handle, Rml::Event& event,
+                                            const Rml::VariantList& args) {
                 nb::gil_scoped_acquire gil;
                 try {
                     nb::list py_args;
                     for (const auto& arg : args)
                         py_args.append(variant_to_python(arg));
-                    cb(PyDataModelHandle(handle, model_name), PyRmlEvent(&event), py_args);
+                    cb(PyDataModelHandle(handle, model_name, context), PyRmlEvent(&event),
+                       py_args);
                 } catch (const std::exception& e) {
                     LOG_ERROR("Data model event error: {}", e.what());
                 }
@@ -489,13 +620,22 @@ namespace lfs::python {
     }
 
     void PyDataModelConstructor::bind_string_list(const std::string& name) {
-        if (!s_string_array_type_registered) {
-            ctor_.RegisterArray<std::vector<Rml::String>>();
-            s_string_array_type_registered = true;
+        if (context_ && !s_string_array_type_contexts.contains(context_)) {
+            if (!ctor_.RegisterArray<std::vector<Rml::String>>())
+                return;
+            s_string_array_type_contexts.insert(context_);
         }
         auto& storage = s_model_storage[model_name_];
         storage.string_arrays[name]; // create empty vector
         ctor_.Bind(name, &storage.string_arrays[name]);
+    }
+
+    void PyDataModelConstructor::bind_record_list(const std::string& name) {
+        if (!ensure_record_types_registered(ctor_, context_))
+            return;
+        auto& storage = s_model_storage[model_name_];
+        storage.record_arrays[name];
+        ctor_.Bind(name, &storage.record_arrays[name]);
     }
 
     PyDataModelHandle PyDataModelConstructor::get_handle() {
@@ -667,6 +807,8 @@ namespace lfs::python {
             .def("dirty_all", &PyDataModelHandle::dirty_all)
             .def("is_dirty", &PyDataModelHandle::is_dirty, nb::arg("name"))
             .def("update_string_list", &PyDataModelHandle::update_string_list, nb::arg("name"),
+                 nb::arg("items"))
+            .def("update_record_list", &PyDataModelHandle::update_record_list, nb::arg("name"),
                  nb::arg("items"));
 
         nb::class_<PyDataModelConstructor>(rml, "DataModelConstructor")
@@ -679,6 +821,7 @@ namespace lfs::python {
             .def("register_transform", &PyDataModelConstructor::register_transform,
                  nb::arg("name"), nb::arg("func"))
             .def("bind_string_list", &PyDataModelConstructor::bind_string_list, nb::arg("name"))
+            .def("bind_record_list", &PyDataModelConstructor::bind_record_list, nb::arg("name"))
             .def("get_handle", &PyDataModelConstructor::get_handle);
 
         rml.def("get_document", [](const std::string& name) -> nb::object {

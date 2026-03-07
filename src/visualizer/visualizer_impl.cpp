@@ -607,7 +607,8 @@ namespace lfs::vis {
         // ui::PointCloudModeChanged are handled by RenderingManager::setupEventHandlers()
 
         // Window redraw requests on scene/mode changes
-        state::SceneChanged::when([this](const auto&) {
+        state::SceneChanged::when([this](const auto& event) {
+            python::set_scene_mutation_flags(event.mutation_flags);
             python::bump_scene_generation();
             if (window_manager_) {
                 window_manager_->requestRedraw();
