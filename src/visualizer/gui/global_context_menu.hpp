@@ -6,8 +6,8 @@
 
 #include "gui/rmlui/rml_fbo.hpp"
 #include <RmlUi/Core/EventListener.h>
-#include <cstddef>
 #include <core/export.hpp>
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -17,7 +17,9 @@ namespace Rml {
     class ElementDocument;
 } // namespace Rml
 
-namespace lfs::vis { struct Theme; }
+namespace lfs::vis {
+    struct Theme;
+}
 namespace lfs::vis::gui {
 
     struct PanelInputState;

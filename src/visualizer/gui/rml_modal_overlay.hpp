@@ -20,7 +20,9 @@ namespace Rml {
     class ElementDocument;
 } // namespace Rml
 
-namespace lfs::vis { struct Theme; }
+namespace lfs::vis {
+    struct Theme;
+}
 namespace lfs::vis::gui {
 
     class RmlUIManager;

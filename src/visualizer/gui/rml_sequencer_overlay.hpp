@@ -20,9 +20,9 @@ namespace Rml {
 } // namespace Rml
 
 namespace lfs::vis {
-struct Theme;
+    struct Theme;
     class SequencerController;
-}
+} // namespace lfs::vis
 
 namespace lfs::vis::gui {
 

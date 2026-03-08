@@ -5,8 +5,8 @@
 
 #include "gui/rmlui/rml_fbo.hpp"
 #include "sequencer/rml_sequencer_panel.hpp"
-#include <cstddef>
 #include <core/export.hpp>
+#include <cstddef>
 #include <string>
 
 namespace Rml {
@@ -15,7 +15,9 @@ namespace Rml {
     class ElementDocument;
 } // namespace Rml
 
-namespace lfs::vis { struct Theme; }
+namespace lfs::vis {
+    struct Theme;
+}
 namespace lfs::vis::gui {
 
     class RmlUIManager;
