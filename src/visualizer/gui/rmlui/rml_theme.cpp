@@ -216,6 +216,10 @@ namespace lfs::vis::gui::rml_theme {
         const auto btn_error = colorToRml(blend(p.surface, p.error, tn));
         const auto btn_error_h = colorToRml(blend(p.surface, p.error, th));
         const auto btn_error_a = colorToRml(blend(p.surface, p.error, ta));
+        const auto window_surface =
+            colorToRml(t.isLightTheme() ? lighten(p.surface, 0.015f) : lighten(p.surface, 0.02f));
+        const auto title_surface =
+            colorToRml(t.isLightTheme() ? darken(p.surface, 0.02f) : lighten(p.surface, 0.045f));
 
         const auto success = colorToRml(p.success);
         const auto warning = colorToRml(p.warning);
@@ -233,6 +237,7 @@ namespace lfs::vis::gui::rml_theme {
         const int inner_gap = static_cast<int>(t.sizes.item_inner_spacing.x);
         const int fp_x = static_cast<int>(t.sizes.frame_padding.x);
         const int fp_y = static_cast<int>(t.sizes.frame_padding.y);
+        const int window_rounding = std::max(4, static_cast<int>(t.sizes.window_rounding));
 
         const auto check_decorator =
             check_path.empty()
@@ -247,8 +252,8 @@ namespace lfs::vis::gui::rml_theme {
         const auto error_col = colorToRml(p.error);
 
         return std::format(
-                   "#window-frame {{ background-color: {0}; border-color: {1}; }}\n"
-                   "#title-bar {{ background-color: {2}; }}\n"
+                   "#window-frame {{ background-color: {0}; border-color: {1}; border-radius: {7}dp; }}\n"
+                   "#title-bar {{ background-color: {2}; border-top-left-radius: {7}dp; border-top-right-radius: {7}dp; }}\n"
                    "#title-text {{ color: {3}; }}\n"
                    "#close-btn {{ color: {4}; }}\n"
                    "#close-btn:hover {{ color: {5}; }}\n"
@@ -265,8 +270,8 @@ namespace lfs::vis::gui::rml_theme {
                    ".video-card:hover .card-body {{ border-color: {6}; background-color: {2}; }}\n"
                    ".play-icon {{ color: {6}; }}\n"
                    ".card-title {{ color: {4}; }}\n",
-                   surface, border, surface_bright, text, text_dim,
-                   error_col, primary) +
+                   window_surface, border, title_surface, text, text_dim,
+                   error_col, primary, window_rounding) +
                    check_decorator +
                    arrow_decorator +
                    std::format(

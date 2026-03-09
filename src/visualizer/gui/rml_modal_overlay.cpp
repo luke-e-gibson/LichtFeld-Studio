@@ -101,6 +101,9 @@ namespace lfs::vis::gui {
 
         const auto surface = colorToRmlAlpha(p.surface, 0.98f);
         const auto border = colorToRmlAlpha(p.border, 0.4f);
+        const auto backdrop = colorToRmlAlpha(
+            t.isLightTheme() ? ImVec4{0.12f, 0.14f, 0.18f, 1.0f} : p.background,
+            t.isLightTheme() ? 0.18f : 0.44f);
         const auto text = colorToRml(p.text);
         const auto text_dim = colorToRml(p.text_dim);
         const auto sep_color = colorToRmlAlpha(p.border, 0.5f);
@@ -112,6 +115,7 @@ namespace lfs::vis::gui {
         const int rounding = static_cast<int>(t.sizes.window_rounding);
 
         return std::format(
+            ".modal-backdrop {{ background-color: {}; }}\n"
             ".modal-dialog {{ background-color: {}; border-color: {}; border-radius: {}dp; }}\n"
             ".modal-title {{ color: {}; }}\n"
             ".modal-sep {{ background-color: {}; }}\n"
@@ -122,7 +126,7 @@ namespace lfs::vis::gui {
             ".modal-dialog.style-info {{ border-color: {}; }}\n"
             ".modal-dialog.style-warning {{ border-color: {}; }}\n"
             ".modal-dialog.style-error {{ border-color: {}; }}\n",
-            surface, border, rounding,
+            backdrop, surface, border, rounding,
             text, sep_color, text, text_dim,
             error_col, warning_col,
             info_border, warn_border, err_border);

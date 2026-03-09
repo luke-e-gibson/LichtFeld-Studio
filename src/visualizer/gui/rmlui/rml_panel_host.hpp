@@ -77,6 +77,7 @@ namespace lfs::vis::gui {
 
     private:
         static std::vector<uint32_t> drainTextInput();
+        bool hitTestPanelShape(float local_x, float local_y, float logical_w, float logical_h);
         bool forwardInput(float panel_x, float panel_y);
         bool syncThemeProperties();
         std::string generateThemeRCSS(const lfs::vis::Theme& t) const;
@@ -107,6 +108,7 @@ namespace lfs::vis::gui {
         std::string rml_path_;
         Rml::Context* rml_context_ = nullptr;
         Rml::ElementDocument* document_ = nullptr;
+        Rml::Element* frame_el_ = nullptr;
         Rml::Element* content_wrap_el_ = nullptr;
         Rml::Element* content_el_ = nullptr;
         Rml::Element* scroll_el_ = nullptr;

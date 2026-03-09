@@ -39,6 +39,7 @@ namespace lfs::vis::gui {
         void setForcedHeight(float h) override;
         bool wantsKeyboard() const override;
         bool needsAnimationFrame() const override;
+        bool wantsExternalFloatingShadow() const override { return !foreground_; }
         void setForeground(bool fg);
 
     private:
