@@ -40,7 +40,7 @@ namespace lfs::vis::gui {
                                               const ScreenState& screen) {
         cursor_request_ = CursorRequest::None;
 
-        if (!show_main_panel || ui_hidden) {
+        if (!show_main_panel || ui_hidden || screen.work_size.x <= 0 || screen.work_size.y <= 0) {
             python_console_hovering_edge_ = false;
             python_console_resizing_ = false;
             return;
