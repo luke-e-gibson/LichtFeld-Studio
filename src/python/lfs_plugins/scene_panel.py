@@ -121,6 +121,7 @@ class ScenePanel(RmlPanel):
         self.doc = None
         self.container = None
         self.filter_input = None
+        self._filter_clear = None
         self._context_menu = None
         self._handle = None
 
@@ -176,6 +177,7 @@ class ScenePanel(RmlPanel):
         model.bind_func("context_menu_visible", lambda: self._context_menu_visible)
         model.bind_func("context_menu_left", lambda: self._context_menu_left)
         model.bind_func("context_menu_top", lambda: self._context_menu_top)
+        model.bind_func("show_filter_clear", lambda: len(self._filter_text) > 0)
         model.bind_record_list("visible_rows")
         model.bind_record_list("context_menu_entries")
         self._handle = model.get_handle()
@@ -185,10 +187,13 @@ class ScenePanel(RmlPanel):
         self._last_lang = lf.ui.get_current_language()
         self.container = doc.get_element_by_id("tree-container")
         self.filter_input = doc.get_element_by_id("filter-input")
+        self._filter_clear = doc.get_element_by_id("filter-clear")
         self._context_menu = doc.get_element_by_id("context-menu")
 
         if self.filter_input:
             self.filter_input.add_event_listener("change", self._on_filter_change)
+        if self._filter_clear:
+            self._filter_clear.add_event_listener("click", self._on_filter_clear)
 
         if self.container:
             self.container.add_event_listener("click", self._on_tree_click)
@@ -480,6 +485,15 @@ class ScenePanel(RmlPanel):
         del event
         if self.filter_input:
             self._filter_text = self.filter_input.get_attribute("value") or ""
+        self._dirty_model("show_filter_clear")
+        self._rebuild_tree(force=True)
+
+    def _on_filter_clear(self, event):
+        del event
+        self._filter_text = ""
+        if self.filter_input:
+            self.filter_input.set_attribute("value", "")
+        self._dirty_model("show_filter_clear")
         self._rebuild_tree(force=True)
 
     def _preserve_scroll_for_local_selection(self):

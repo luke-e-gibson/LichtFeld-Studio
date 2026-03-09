@@ -45,6 +45,18 @@ body {
     border-width: 0;
 }
 
+#filter-clear {
+    width: 12dp;
+    height: 12dp;
+    margin-left: 4dp;
+    image-color: #6c7086;
+    cursor: pointer;
+}
+
+#filter-clear:hover {
+    image-color: #cdd6f4;
+}
+
 #tree-container {
     flex: 1;
     overflow: auto;

@@ -51,11 +51,9 @@
     <span class="status-text status-success" data-if="show_checkpoint_saved">{{label_checkpoint_saved}}</span>
   </div>
 
-  <div class="separator"></div>
-
   <!-- ── Training Parameters ── -->
   <div class="training-panel-title">
-    <span class="training-panel-title-icon">&#9881;</span>
+    <img class="training-panel-title-icon" src="../icon/settings.png" />
     <span>{{label_hdr_basic_params}}</span>
   </div>
   <div class="training-panel-block">
@@ -213,6 +211,7 @@
 
   <!-- ── Advanced Parameters ── -->
   <div class="training-panel-title training-panel-title--secondary">
+    <img class="training-panel-title-icon" src="../icon/adjustments.png" />
     <span>{{label_hdr_advanced_params}}</span>
   </div>
   <div class="training-panel-block">

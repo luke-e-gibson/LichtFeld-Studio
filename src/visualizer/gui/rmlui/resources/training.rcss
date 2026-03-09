@@ -45,9 +45,9 @@ select {
     align-items: center;
     gap: 6dp;
     margin-top: 2dp;
-    padding: 0 0 6dp;
-    border-bottom-width: 1dp;
-    border-bottom-color: rgba(137, 180, 250, 84);
+    padding: 6dp 0 0;
+    border-top-width: 1dp;
+    border-top-color: rgba(137, 180, 250, 84);
     color: #f5f7ff;
     font-size: 11dp;
     font-weight: bold;
@@ -58,12 +58,9 @@ select {
 }
 
 .training-panel-title-icon {
-    display: flex;
-    align-items: center;
     width: 14dp;
-    justify-content: center;
-    color: #89b4fa;
-    font-size: 12dp;
+    height: 14dp;
+    image-color: #89b4fa;
     flex-shrink: 0;
 }
 
