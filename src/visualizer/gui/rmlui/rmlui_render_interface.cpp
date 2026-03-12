@@ -187,7 +187,7 @@ namespace lfs::vis::gui {
         if (tensor.is_empty())
             return 0;
 
-        assert(tensor.dim() == 3);
+        assert(tensor.ndim() == 3);
 
         if (params.ud && params.thumb == 0 && params.cam_uid >= 0 && scene_) {
             auto cameras = scene_->getAllCameras();
