@@ -16,8 +16,8 @@
 #include "visualizer_impl.hpp"
 #include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <cuda_runtime.h>
 #include <glm/geometric.hpp>
