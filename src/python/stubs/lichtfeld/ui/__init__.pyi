@@ -1873,22 +1873,22 @@ def save_json_file_dialog(default_name: str = 'config.json') -> str:
     Open a save file dialog for JSON files. Returns empty string if cancelled.
     """
 
-def save_ply_file_dialog(default_name: str = 'export.ply') -> str:
+def save_ply_file_dialog(default_name: str = 'export') -> str:
     """
     Open a save file dialog for PLY files. Returns empty string if cancelled.
     """
 
-def save_sog_file_dialog(default_name: str = 'export.sog') -> str:
+def save_sog_file_dialog(default_name: str = 'export') -> str:
     """
     Open a save file dialog for SOG files. Returns empty string if cancelled.
     """
 
-def save_spz_file_dialog(default_name: str = 'export.spz') -> str:
+def save_spz_file_dialog(default_name: str = 'export') -> str:
     """
     Open a save file dialog for SPZ files. Returns empty string if cancelled.
     """
 
-def save_html_file_dialog(default_name: str = 'viewer.html') -> str:
+def save_html_file_dialog(default_name: str = 'viewer') -> str:
     """
     Open a save file dialog for HTML viewer files. Returns empty string if cancelled.
     """
