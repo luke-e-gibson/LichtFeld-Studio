@@ -954,9 +954,10 @@ namespace lfs::training {
             save_ply(params_.dataset.output_path, iter, /*join=*/false);
             auto result = save_checkpoint(iter);
             if (result) {
-                auto checkpoint_path = params_.dataset.output_path / "checkpoints" /
-                                       std::format("checkpoint_{}.resume", iter);
-                LOG_INFO("Checkpoint and PLY saved to {}", lfs::core::path_to_utf8(params_.dataset.output_path));
+                const auto checkpoint_path = lfs::training::checkpoint_output_path(params_.dataset.output_path);
+                LOG_INFO("Checkpoint and PLY saved to {} (checkpoint: {})",
+                         lfs::core::path_to_utf8(params_.dataset.output_path),
+                         lfs::core::path_to_utf8(checkpoint_path));
             } else {
                 LOG_ERROR("Failed to save checkpoint: {}", result.error());
             }
