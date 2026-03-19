@@ -40,8 +40,8 @@
 #include <cuda_runtime.h>
 #include <expected>
 #include <memory>
-#include <nvtx3/nvToolsExt.h>
 #include <numeric>
+#include <nvtx3/nvToolsExt.h>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
@@ -419,7 +419,8 @@ namespace lfs::training {
         }
 
         if (auto result = ppisp_->copy_inference_weights_from(
-                loaded_ppisp, mappings.frame_mapping, mappings.camera_mapping); !result) {
+                loaded_ppisp, mappings.frame_mapping, mappings.camera_mapping);
+            !result) {
             return std::unexpected(std::format(
                 "Failed to import frozen PPISP weights from '{}': {}",
                 lfs::core::path_to_utf8(sidecar_path),
@@ -514,7 +515,8 @@ namespace lfs::training {
                     return std::unexpected(mappings_result.error());
                 }
                 if (const auto error = ppisp_controller_pool_->copy_inference_weights_from(
-                        *loaded_controller, mappings_result->camera_mapping); !error.empty()) {
+                        *loaded_controller, mappings_result->camera_mapping);
+                    !error.empty()) {
                     return std::unexpected(std::format(
                         "Failed to import frozen PPISP controller weights from '{}': {}",
                         lfs::core::path_to_utf8(sidecar_path),

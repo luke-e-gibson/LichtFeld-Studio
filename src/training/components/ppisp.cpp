@@ -879,13 +879,15 @@ namespace lfs::training {
         }
 
         const auto frame_indices = lfs::core::Tensor::from_vector(
-            source_frame_indices,
-            {source_frame_indices.size()},
-            lfs::core::Device::CUDA).to(lfs::core::DataType::Int32);
+                                       source_frame_indices,
+                                       {source_frame_indices.size()},
+                                       lfs::core::Device::CUDA)
+                                       .to(lfs::core::DataType::Int32);
         const auto camera_indices = lfs::core::Tensor::from_vector(
-            source_camera_indices,
-            {source_camera_indices.size()},
-            lfs::core::Device::CUDA).to(lfs::core::DataType::Int32);
+                                        source_camera_indices,
+                                        {source_camera_indices.size()},
+                                        lfs::core::Device::CUDA)
+                                        .to(lfs::core::DataType::Int32);
 
         exposure_params_ = source.exposure_params_.index_select(0, frame_indices).contiguous();
         color_params_ = source.color_params_.reshape({source.num_frames_, 8})

@@ -18,8 +18,8 @@ namespace {
     using lfs::core::Device;
     using lfs::core::Tensor;
     using lfs::training::PPISP;
-    using lfs::training::PPISPControllerPool;
     using lfs::training::PPISPConfig;
+    using lfs::training::PPISPControllerPool;
     using lfs::training::PPISPFileMetadata;
 
     Tensor make_input(float base) {
