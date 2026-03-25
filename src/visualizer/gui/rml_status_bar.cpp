@@ -194,6 +194,8 @@ namespace lfs::vis::gui {
         ctor.Bind("zoom_sep_color", &model_.zoom_sep_color);
         ctor.Bind("lfs_mem_text", &model_.lfs_mem_text);
         ctor.Bind("lfs_mem_color", &model_.lfs_mem_color);
+        ctor.Bind("show_gpu_model", &model_.show_gpu_model);
+        ctor.Bind("gpu_model_text", &model_.gpu_model_text);
         ctor.Bind("gpu_mem_text", &model_.gpu_mem_text);
         ctor.Bind("gpu_mem_color", &model_.gpu_mem_color);
         ctor.Bind("fps_value", &model_.fps_value);
@@ -533,6 +535,8 @@ namespace lfs::vis::gui {
         ImVec4 mem_color = pct < 50.0f ? p.success : (pct < 75.0f ? p.warning : p.error);
         setModelString("lfs_mem_text", model_.lfs_mem_text, std::format("LFS {:.1f}GB", app_gb));
         setModelString("lfs_mem_color", model_.lfs_mem_color, colorToRml(p.info));
+        setModelBool("show_gpu_model", model_.show_gpu_model, !mem.device_name.empty());
+        setModelString("gpu_model_text", model_.gpu_model_text, mem.device_name);
         setModelString("gpu_mem_text", model_.gpu_mem_text,
                        std::format("{} {:.1f}/{:.1f}GB", LOC("status_bar.gpu"), used_gb, total_gb));
         setModelString("gpu_mem_color", model_.gpu_mem_color, colorToRml(mem_color));
