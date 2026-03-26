@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include "strategy_factory.hpp"
-#include "adc.hpp"
 #include "core/logger.hpp"
 #include "improved_gs_plus.hpp"
 #include "mcmc.hpp"
@@ -30,11 +29,6 @@ namespace lfs::training {
     }
 
     void StrategyFactory::register_builtins() {
-        registry_[std::string(core::param::kStrategyADC)] = [](core::SplatData& model)
-            -> std::expected<std::unique_ptr<IStrategy>, std::string> {
-            return std::make_unique<ADC>(model);
-        };
-
         registry_[std::string(core::param::kStrategyMCMC)] = [](core::SplatData& model)
             -> std::expected<std::unique_ptr<IStrategy>, std::string> {
             return std::make_unique<MCMC>(model);

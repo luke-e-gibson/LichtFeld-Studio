@@ -184,8 +184,8 @@ namespace lfs::core {
         }
 
         std::string OptimizationParameters::validate() const {
-            if (gut && (strategy == "adc" || strategy == "igs+"))
-                return "GUT and " + strategy + " strategy cannot be used together";
+            if (gut && canonical_strategy_name(strategy) == kStrategyIGSPlus)
+                return "GUT and igs+ strategy cannot be used together";
             if (ppisp_freeze_from_sidecar && !use_ppisp)
                 return "PPISP sidecar freeze requires PPISP enabled";
             return {};
@@ -210,19 +210,6 @@ namespace lfs::core {
         OptimizationParameters OptimizationParameters::mcmc_defaults() {
             auto p = OptimizationParameters{};
             p.strategy = std::string(kStrategyMCMC);
-            return p;
-        }
-
-        OptimizationParameters OptimizationParameters::adc_defaults() {
-            auto p = OptimizationParameters{};
-            p.strategy = "adc";
-            p.opacity_lr = 0.025f;
-            p.stop_refine = 15'000;
-            p.opacity_reg = 0.0f;
-            p.scale_reg = 0.0f;
-            p.init_opacity = 0.1f;
-            p.max_cap = 6'000'000;
-            p.tv_loss_weight = 5.0f;
             return p;
         }
 

@@ -74,7 +74,6 @@ set(TRAINING_NEW_SOURCES
     losses/regularization.cpp
     losses/photometric_loss.cpp
     strategies/strategy_utils.cpp
-    strategies/adc.cpp
     strategies/mcmc.cpp
     strategies/mrnf.cpp
     strategies/strategy_factory.cpp

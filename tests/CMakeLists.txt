@@ -83,7 +83,6 @@ message(STATUS "Tests: LibTorch ${Torch_VERSION} found for tensor comparison tes
 # Benchmark sources (performance measurement focused)
 set(BENCHMARK_FILES
     benchmark_background_blend.cpp
-    benchmark_adc.cpp
     benchmark_grad_alpha_layout.cpp
     benchmark_pipelined_loader.cpp
     benchmark_slice_assignment.cpp
@@ -166,7 +165,6 @@ set(TEST_FILES
     test_dataloader_lfs.cpp
     test_bilateral_grid.cpp
     test_sparsity_debug.cpp
-    test_adc.cpp
     test_dtype_operations_comprehensive.cpp
     test_tensor_bugs.cpp
     test_densification_performance.cpp
@@ -200,7 +198,7 @@ set(TEST_FILES
     test_usd_format.cpp
     test_unicode_paths_windows.cpp
     test_interleaved_slice_copy.cpp
-    test_adc_tensor_ops.cpp
+    test_densification_tensor_ops.cpp
     test_tensor_zero_dimension.cpp
     test_mask_loss.cpp
     test_checkpoint_resume.cpp
@@ -227,7 +225,6 @@ set(TEST_FILES
     test_cpu_dtype_conversions.cpp
     test_cpu_large_tensor_bugs.cpp
     test_curand_buffer_overflow.cpp
-    test_adc_comparison.cpp
     test_gradient_accumulation.cpp
     test_image_resize_parallel.cpp
     test_tensor_cat_bug.cpp

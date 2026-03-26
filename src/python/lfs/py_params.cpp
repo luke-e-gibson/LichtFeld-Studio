@@ -156,35 +156,35 @@ namespace lfs::python {
 
             // Strategy
             .string_prop(&OptimizationParameters::strategy,
-                         "strategy", "Strategy", "mcmc",
-                         "Optimization strategy: mcmc, adc, mrnf, or igs+")
+                         "strategy", "Strategy", "mrnf",
+                         "Optimization strategy: mcmc, mrnf, or igs+")
             .flags(PROP_NEEDS_RESTART)
 
-            // ADC strategy parameters
+            // Shared densification parameters
             .float_prop(&OptimizationParameters::prune_opacity,
                         "prune_opacity", "Prune Opacity", 0.005f, 0.0f, std::numeric_limits<float>::infinity(),
-                        "Opacity threshold for pruning (ADC)")
+                        "Opacity threshold for pruning")
             .float_prop(&OptimizationParameters::grow_scale3d,
                         "grow_scale3d", "Grow Scale 3D", 0.01f, 0.0f, std::numeric_limits<float>::infinity(),
-                        "3D scale threshold for growing (ADC)")
+                        "3D scale threshold for growing")
             .float_prop(&OptimizationParameters::grow_scale2d,
                         "grow_scale2d", "Grow Scale 2D", 0.05f, 0.0f, std::numeric_limits<float>::infinity(),
-                        "2D scale threshold for growing (ADC)")
+                        "2D scale threshold for growing")
             .size_prop(&OptimizationParameters::reset_every,
                        "reset_every", "Reset Every", 3000, 100, 10000,
-                       "Iteration interval for opacity reset (ADC)")
+                       "Iteration interval for opacity reset")
             .float_prop(&OptimizationParameters::prune_scale3d,
                         "prune_scale3d", "Prune Scale 3D", 0.1f, 0.0f, std::numeric_limits<float>::infinity(),
-                        "3D scale threshold for pruning (ADC)")
+                        "3D scale threshold for pruning")
             .float_prop(&OptimizationParameters::prune_scale2d,
                         "prune_scale2d", "Prune Scale 2D", 0.15f, 0.0f, std::numeric_limits<float>::infinity(),
-                        "2D scale threshold for pruning (ADC)")
+                        "2D scale threshold for pruning")
             .size_prop(&OptimizationParameters::pause_refine_after_reset,
                        "pause_refine_after_reset", "Pause After Reset", 0, 0, std::numeric_limits<size_t>::max(),
                        "Iterations to pause refinement after opacity reset")
             .bool_prop(&OptimizationParameters::revised_opacity,
                        "revised_opacity", "Revised Opacity", false,
-                       "Use revised opacity calculation for ADC")
+                       "Use revised opacity calculation during densification")
 
             // MRNF strategy parameters
             .float_prop(&OptimizationParameters::growth_grad_threshold,
@@ -1084,7 +1084,7 @@ namespace lfs::python {
                 [](PyOptimizationParams& /*self*/, const std::string& strategy) {
                     const auto canonical_strategy = lfs::core::param::canonical_strategy_name(strategy);
                     if (canonical_strategy.empty()) {
-                        throw std::invalid_argument("Strategy must be 'mcmc', 'adc', 'mrnf', or 'igs+'");
+                        throw std::invalid_argument("Strategy must be 'mcmc', 'mrnf', or 'igs+'");
                     }
                     auto* pm = get_parameter_manager();
                     if (pm) {
@@ -1092,7 +1092,7 @@ namespace lfs::python {
                     }
                 },
                 nb::arg("strategy"),
-                "Set active strategy ('mcmc', 'adc', 'mrnf', or 'igs+')")
+                "Set active strategy ('mcmc', 'mrnf', or 'igs+')")
             .def_prop_ro(
                 "headless", [](PyOptimizationParams& self) { return self.params().headless; },
                 "Whether running without visualization")
@@ -1258,7 +1258,7 @@ namespace lfs::python {
                 "revised_opacity",
                 [](PyOptimizationParams& self) { return self.params().revised_opacity; },
                 [](PyOptimizationParams&, bool v) { modify_params([v](auto& p) { p.revised_opacity = v; }); },
-                "Use revised opacity calculation for ADC densification")
+                "Use revised opacity calculation during densification")
             .def_prop_ro(
                 "save_steps",
                 [](PyOptimizationParams& self) -> std::vector<size_t> {

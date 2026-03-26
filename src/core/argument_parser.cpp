@@ -30,7 +30,7 @@ namespace {
         Help
     };
 
-    const std::set<std::string> VALID_STRATEGIES = {"mcmc", "adc", "mrnf", "mnrf", "lfs", "igs+"};
+    const std::set<std::string> VALID_STRATEGIES = {"mcmc", "mrnf", "mnrf", "lfs", "igs+"};
 
     // Parse log level from string
     lfs::core::LogLevel parse_log_level(const std::string& level_str) {
@@ -105,7 +105,7 @@ namespace {
             ::args::Group training_sep(parser, " ");
             ::args::Group training_group(parser, "TRAINING PARAMETERS:");
             ::args::ValueFlag<uint32_t> iterations(training_group, "iterations", "Number of iterations", {'i', "iter"});
-            ::args::ValueFlag<std::string> strategy(training_group, "strategy", "Optimization strategy: mcmc, adc, mrnf, igs+ (legacy aliases: mnrf, lfs)", {"strategy"});
+            ::args::ValueFlag<std::string> strategy(training_group, "strategy", "Optimization strategy: mcmc, mrnf, igs+ (legacy aliases: mnrf, lfs)", {"strategy"});
             ::args::ValueFlag<int> sh_degree(training_group, "sh_degree", "Max SH degree [0-3]", {"sh-degree"});
             ::args::ValueFlag<int> sh_degree_interval(training_group, "sh_degree_interval", "SH degree interval", {"sh-degree-interval"});
             ::args::ValueFlag<int> max_cap(training_group, "max_cap", "Maximum number of Gaussians", {"max-cap"});
@@ -429,7 +429,7 @@ namespace {
                 const auto strat = ::args::get(strategy);
                 if (VALID_STRATEGIES.find(strat) == VALID_STRATEGIES.end()) {
                     return std::unexpected(std::format(
-                        "ERROR: Invalid optimization strategy '{}'. Valid strategies are: mcmc, adc, mrnf, igs+ (legacy aliases: mnrf, lfs)",
+                        "ERROR: Invalid optimization strategy '{}'. Valid strategies are: mcmc, mrnf, igs+ (legacy aliases: mnrf, lfs)",
                         strat));
                 }
 
@@ -724,9 +724,7 @@ lfs::core::args::parse_args_and_params(int argc, const char* const argv[]) {
             return std::unexpected("--strategy conflicts with config file");
         }
     } else {
-        if (strategy == "adc")
-            params->optimization = lfs::core::param::OptimizationParameters::adc_defaults();
-        else if (lfs::core::param::is_mrnf_strategy(strategy))
+        if (lfs::core::param::is_mrnf_strategy(strategy))
             params->optimization = lfs::core::param::OptimizationParameters::mrnf_defaults();
         else if (strategy == "igs+")
             params->optimization = lfs::core::param::OptimizationParameters::igs_plus_defaults();

@@ -57,7 +57,7 @@ LOCALE_KEYS = {
     "hdr_bilateral": "training.section.bilateral_grid",
     "hdr_losses": "training.section.losses",
     "hdr_init": "training.section.initialization",
-    "hdr_adc": "training_panel.pruning_growing",
+    "hdr_pruning_growing": "training_panel.pruning_growing",
     "hdr_mrnf": "training_panel.mrnf_params",
     "hdr_sparsity": "training_panel.sparsity",
     "hdr_save_steps": "training_panel.save_steps",
@@ -145,7 +145,6 @@ LOCALE_KEYS = {
     "bg_browse": "training_params.bg_image_browse",
     "bg_clear": "training_params.bg_image_clear",
     "strategy_mcmc": "training.options.strategy.mcmc",
-    "strategy_adc": "training.options.strategy.adc",
     "strategy_mrnf": "training.options.strategy.mrnf",
     "strategy_igs_plus": "training.options.strategy.igs_plus",
     "tile_full": "training.options.tile.full",
@@ -166,7 +165,6 @@ LOCALE_KEYS = {
 
 STRATEGY_LABEL_KEYS = {
     "mcmc": "training.options.strategy.mcmc",
-    "adc": "training.options.strategy.adc",
     "mrnf": "training.options.strategy.mrnf",
     "mnrf": "training.options.strategy.mrnf",
     "lfs": "training.options.strategy.mrnf",
@@ -300,12 +298,12 @@ RENDER_SYNC = {
 
 SECTIONS = [
     "basic_params", "advanced_params", "dataset", "optimization",
-    "bilateral", "losses", "init", "adc", "sparsity", "save_steps",
+    "bilateral", "losses", "init", "pruning_growing", "sparsity", "save_steps",
 ]
 
 INITIALLY_COLLAPSED = {
     "advanced_params", "dataset", "optimization", "bilateral",
-    "losses", "init", "adc", "sparsity", "save_steps",
+    "losses", "init", "pruning_growing", "sparsity", "save_steps",
 }
 
 
@@ -467,14 +465,10 @@ class TrainingPanel(Panel):
                          lambda: p() is not None and p().has_params() and bool(p().bg_image_path))
         model.bind_func("dep_bilateral",
                          lambda: p() is not None and p().has_params() and p().use_bilateral_grid)
-        model.bind_func("dep_adc",
-                         lambda: p() is not None and p().has_params() and p().strategy == "adc")
         model.bind_func("dep_mrnf",
                          lambda: p() is not None and p().has_params() and _is_mrnf_strategy(p().strategy))
         model.bind_func("dep_igs",
                          lambda: p() is not None and p().has_params() and p().strategy == "igs+")
-        model.bind_func("dep_adc_or_igs",
-                         lambda: p() is not None and p().has_params() and p().strategy in ("adc", "igs+"))
         model.bind_func("dep_sparsity",
                          lambda: p() is not None and p().has_params() and p().enable_sparsity)
         model.bind_func("dep_random",
@@ -514,7 +508,7 @@ class TrainingPanel(Panel):
         model.bind_func("adv_disabled",
                          _params_edit_locked)
         model.bind_func("gut_disabled",
-                         lambda: p() is not None and p().has_params() and p().strategy in ("adc", "igs+"))
+                         lambda: p() is not None and p().has_params() and p().strategy == "igs+")
         model.bind_func("dataset_disabled",
                          lambda: not (lf.dataset_params() is not None and
                                       lf.dataset_params().has_params() and
@@ -1014,7 +1008,7 @@ class TrainingPanel(Panel):
         params = lf.optimization_params()
         if not params or not params.has_params():
             return
-        if val in ("adc", "igs+") and params.gut:
+        if val == "igs+" and params.gut:
             btn_gut = tr("training.conflict.btn_disable_gut")
             btn_cancel = tr("training.conflict.btn_cancel")
 
@@ -1028,8 +1022,8 @@ class TrainingPanel(Panel):
                         self._handle.dirty_all()
 
             lf.ui.confirm_dialog(
-                tr("training.error.adc_gut_title"),
-                tr("training.conflict.adc_gut_strategy_message"),
+                tr("training.error.strategy_gut_title"),
+                tr("training.conflict.strategy_gut_strategy_message"),
                 [btn_gut, btn_cancel],
                 _on_conflict)
         else:
@@ -1390,8 +1384,8 @@ class TrainingPanel(Panel):
                     lf.start_training()
 
             lf.ui.confirm_dialog(
-                tr("training.error.adc_gut_title"),
-                tr("training.conflict.adc_gut_start_message"),
+                tr("training.error.strategy_gut_title"),
+                tr("training.conflict.strategy_gut_start_message"),
                 [btn_mcmc, btn_gut, btn_cancel],
                 _on_conflict)
         elif self._should_offer_pc_save():
@@ -1494,8 +1488,8 @@ class TrainingPanel(Panel):
                             p.gut = False
                             lf.start_training()
                     lf.ui.confirm_dialog(
-                        tr("training.error.adc_gut_title"),
-                        tr("training.conflict.adc_gut_start_message"),
+                        tr("training.error.strategy_gut_title"),
+                        tr("training.conflict.strategy_gut_start_message"),
                         [btn_mcmc, btn_gut, btn_cancel],
                         _on_start_conflict)
                 else:
@@ -1571,14 +1565,13 @@ class TrainingPanel(Panel):
                 tr("training.options.strategy.mrnf"),
                 tr("training.options.strategy.igs_plus"),
                 tr("training.options.strategy.mcmc"),
-                tr("training.options.strategy.adc"),
             ]
-            strategy_map = {0: "mrnf", 1: "igs+", 2: "mcmc", 3: "adc"}
-            strategy_idx = {"mrnf": 0, "mnrf": 0, "lfs": 0, "igs+": 1, "mcmc": 2, "adc": 3}.get(params.strategy, 2)
+            strategy_map = {0: "mrnf", 1: "igs+", 2: "mcmc"}
+            strategy_idx = {"mrnf": 0, "mnrf": 0, "lfs": 0, "igs+": 1, "mcmc": 2}.get(params.strategy, 0)
             changed, new_idx = layout.combo("##py_strategy", strategy_idx, strategy_items)
             if changed:
                 new_strategy = strategy_map[new_idx]
-                if new_strategy in ("adc", "igs+") and params.gut:
+                if new_strategy == "igs+" and params.gut:
                     btn_gut = tr("training.conflict.btn_disable_gut")
                     btn_cancel = tr("training.conflict.btn_cancel")
                     def _on_strategy_conflict(button, _gut=btn_gut, _strategy=new_strategy):
@@ -1587,8 +1580,8 @@ class TrainingPanel(Panel):
                             p.gut = False
                             p.set_strategy(_strategy)
                     lf.ui.confirm_dialog(
-                        tr("training.error.adc_gut_title"),
-                        tr("training.conflict.adc_gut_strategy_message"),
+                        tr("training.error.strategy_gut_title"),
+                        tr("training.conflict.strategy_gut_strategy_message"),
                         [btn_gut, btn_cancel],
                         _on_strategy_conflict)
                 else:
@@ -1733,7 +1726,7 @@ class TrainingPanel(Panel):
             layout.table_next_column()
             layout.label(tr("training_params.gut"))
             layout.table_next_column()
-            gut_disabled = params.strategy in ("adc", "igs+")
+            gut_disabled = params.strategy == "igs+"
             if gut_disabled:
                 layout.begin_disabled(True)
             changed, new_val = layout.checkbox("##py_gut", params.gut)
@@ -1743,7 +1736,7 @@ class TrainingPanel(Panel):
             if gut_disabled:
                 layout.end_disabled()
             if layout.is_item_hovered():
-                tooltip = tr("training.tooltip.gut_adc_conflict") if gut_disabled else tr("training.tooltip.gut")
+                tooltip = tr("training.tooltip.gut_strategy_conflict") if gut_disabled else tr("training.tooltip.gut")
                 layout.set_tooltip(tooltip)
 
             layout.table_next_row()
@@ -2069,10 +2062,10 @@ class TrainingPanel(Panel):
                     layout.end_table()
                 layout.tree_pop()
 
-        if params.strategy in ("adc", "igs+") and layout.tree_node(tr("training_panel.pruning_growing") + "##py"):
+        if params.strategy == "igs+" and layout.tree_node(tr("training_panel.pruning_growing") + "##py"):
             table_open = False
             try:
-                table_open = layout.begin_table("PyADCTable", 2)
+                table_open = layout.begin_table("PyPruningGrowingTable", 2)
                 if table_open:
                     layout.table_setup_column(tr("common.column_label"), 140.0)
                     layout.table_setup_column(tr("common.column_control"), 0.0)

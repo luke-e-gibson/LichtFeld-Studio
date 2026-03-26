@@ -29,7 +29,6 @@
 #include "python/runner.hpp"
 #include "rasterization/fast_rasterizer.hpp"
 #include "rasterization/gsplat_rasterizer.hpp"
-#include "strategies/adc.hpp"
 #include "strategies/mcmc.hpp"
 #include "strategies/strategy_factory.hpp"
 #include "training/kernels/grad_alpha.hpp"
