@@ -934,6 +934,7 @@ namespace lfs::vis::gui {
             const bool editor_owns_escape =
                 editor && (editor->isFocused() || editor->hasActiveCompletion());
             if (!editor_owns_escape) {
+                widgets::RequestActiveEditCancel();
                 ImGui::ClearActiveID();
                 if (editor != nullptr) {
                     editor->unfocus();

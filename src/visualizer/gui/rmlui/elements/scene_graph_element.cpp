@@ -1778,6 +1778,11 @@ namespace lfs::vis::gui {
                     event.StopPropagation();
                 }
             }
+        } else if (type == "escapecancel") {
+            if (rename_node_id_ != core::NULL_NODE && isTextInputTarget(target)) {
+                cancelRename();
+                event.StopPropagation();
+            }
         } else if (type == "keydown") {
             const auto key =
                 static_cast<Rml::Input::KeyIdentifier>(event.GetParameter("key_identifier", 0));
@@ -1785,11 +1790,6 @@ namespace lfs::vis::gui {
             if (rename_node_id_ != core::NULL_NODE && isTextInputTarget(target)) {
                 if (key == Rml::Input::KI_RETURN) {
                     confirmRename();
-                    event.StopPropagation();
-                    return;
-                }
-                if (key == Rml::Input::KI_ESCAPE) {
-                    cancelRename();
                     event.StopPropagation();
                     return;
                 }

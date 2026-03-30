@@ -6,6 +6,7 @@
 
 #include "gui/panel_registry.hpp"
 #include "gui/rmlui/rml_panel_host.hpp"
+#include "gui/rmlui/rml_input_utils.hpp"
 
 #include <RmlUi/Core/EventListener.h>
 #include <cstdint>
@@ -60,11 +61,13 @@ namespace lfs::vis::gui {
         bool syncSummaryChips();
         bool syncSceneVisibility();
         bool handleEvent(Rml::Event& event);
+        void applyFilterInputValue();
         void setTab(Tab tab);
 
         RmlUIManager* manager_ = nullptr;
         RmlPanelHost host_;
         EventListener listener_;
+        rml_input::TextInputEscapeRevertController filter_input_revert_;
 
         Rml::ElementDocument* document_ = nullptr;
         SceneGraphElement* tree_el_ = nullptr;
