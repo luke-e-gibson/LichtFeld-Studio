@@ -320,7 +320,7 @@ namespace lfs::vis {
         style.WindowRounding = s.window_rounding;
         style.FrameRounding = s.frame_rounding;
         style.PopupRounding = s.popup_rounding;
-        style.ScrollbarRounding = s.scrollbar_rounding;
+        style.ScrollbarRounding = std::max(s.scrollbar_rounding, s.scrollbar_size * 0.5f);
         style.GrabRounding = s.grab_rounding;
         style.TabRounding = s.tab_rounding;
         style.WindowBorderSize = s.border_size;
@@ -364,9 +364,9 @@ namespace lfs::vis {
         colors[ImGuiCol_TitleBgActive] = title_bg_active;
         colors[ImGuiCol_TitleBgCollapsed] = title_bg;
         colors[ImGuiCol_MenuBarBg] = title_bg;
-        colors[ImGuiCol_ScrollbarBg] = darken(p.background, 0.05f);
-        colors[ImGuiCol_ScrollbarGrab] = p.surface_bright;
-        colors[ImGuiCol_ScrollbarGrabHovered] = lighten(p.surface_bright, 0.1f);
+        colors[ImGuiCol_ScrollbarBg] = withAlpha(p.background, 0.5f);
+        colors[ImGuiCol_ScrollbarGrab] = withAlpha(p.text_dim, 0.63f);
+        colors[ImGuiCol_ScrollbarGrabHovered] = withAlpha(p.primary, 0.78f);
         colors[ImGuiCol_ScrollbarGrabActive] = p.primary;
         colors[ImGuiCol_CheckMark] = p.primary;
         colors[ImGuiCol_SliderGrab] = p.primary;

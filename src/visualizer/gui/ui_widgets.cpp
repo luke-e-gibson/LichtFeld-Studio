@@ -30,6 +30,7 @@ namespace lfs::vis::gui::widgets {
 
     namespace {
         constexpr float CLICK_THRESHOLD_SQ = 5.0f * 5.0f;
+        constexpr float SCRUB_STYLE_ROUNDING = 6.0f;
         constexpr const char* MULTI_COMPONENT_LABELS[4] = {"##X", "##Y", "##Z", "##W"};
 
         struct WidgetIcons {
@@ -209,6 +210,15 @@ namespace lfs::vis::gui::widgets {
             ImGui::SetActiveID(id, g.CurrentWindow);
         }
 
+        template <typename DrawFn>
+        bool drawWithScrubStyle(const DrawFn& draw_widget) {
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, SCRUB_STYLE_ROUNDING);
+            ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, SCRUB_STYLE_ROUNDING);
+            const bool changed = draw_widget();
+            ImGui::PopStyleVar(2);
+            return changed;
+        }
+
         template <typename T>
         bool drawTrackedNumericWidget(const T* original_values, T* current_values, const int components,
                                       const auto& draw_widget, const auto& post_draw) {
@@ -324,7 +334,10 @@ namespace lfs::vis::gui::widgets {
         const float original = *v;
         return drawTrackedNumericWidget<float>(
             &original, v, 1,
-            [&]() { return ImGui::DragFloat(label, v, speed, min, max, format, flags); },
+            [&]() {
+                return drawWithScrubStyle(
+                    [&]() { return ImGui::DragFloat(label, v, speed, min, max, format, flags); });
+            },
             []() {});
     }
 
@@ -333,7 +346,10 @@ namespace lfs::vis::gui::widgets {
         const int original = *v;
         return drawTrackedNumericWidget<int>(
             &original, v, 1,
-            [&]() { return ImGui::DragInt(label, v, speed, min, max, format, flags); },
+            [&]() {
+                return drawWithScrubStyle(
+                    [&]() { return ImGui::DragInt(label, v, speed, min, max, format, flags); });
+            },
             []() {});
     }
 
@@ -384,7 +400,10 @@ namespace lfs::vis::gui::widgets {
         const float original = *v;
         return drawTrackedNumericWidget<float>(
             &original, v, 1,
-            [&]() { return ImGui::SliderFloat(label, v, min, max, format, flags); },
+            [&]() {
+                return drawWithScrubStyle(
+                    [&]() { return ImGui::SliderFloat(label, v, min, max, format, flags); });
+            },
             []() { handleSliderClickToInput(); });
     }
 
@@ -393,7 +412,10 @@ namespace lfs::vis::gui::widgets {
         const int original = *v;
         return drawTrackedNumericWidget<int>(
             &original, v, 1,
-            [&]() { return ImGui::SliderInt(label, v, min, max, format, flags); },
+            [&]() {
+                return drawWithScrubStyle(
+                    [&]() { return ImGui::SliderInt(label, v, min, max, format, flags); });
+            },
             []() { handleSliderClickToInput(); });
     }
 

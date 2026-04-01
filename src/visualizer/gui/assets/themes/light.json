@@ -57,7 +57,7 @@
     "window_rounding": 6.0,
     "frame_rounding": 2.0,
     "popup_rounding": 4.0,
-    "scrollbar_rounding": 4.0,
+    "scrollbar_rounding": 6.0,
     "grab_rounding": 2.0,
     "tab_rounding": 4.0,
 
@@ -71,8 +71,8 @@
     "item_inner_spacing": [4.0, 4.0],
 
     "indent_spacing": 21.0,
-    "scrollbar_size": 14.0,
-    "grab_min_size": 10.0,
+    "scrollbar_size": 12.0,
+    "grab_min_size": 16.0,
 
     "toolbar_button_size": 24.0,
     "toolbar_padding": 6.0,

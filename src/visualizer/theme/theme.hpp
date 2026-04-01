@@ -35,7 +35,7 @@ namespace lfs::vis {
         float window_rounding = 6.0f;
         float frame_rounding = 2.0f;
         float popup_rounding = 4.0f;
-        float scrollbar_rounding = 4.0f;
+        float scrollbar_rounding = 6.0f;
         float grab_rounding = 2.0f;
         float tab_rounding = 4.0f;
         float border_size = 0.0f;
@@ -46,8 +46,8 @@ namespace lfs::vis {
         ImVec2 item_spacing = {8.0f, 4.0f};
         ImVec2 item_inner_spacing = {4.0f, 4.0f};
         float indent_spacing = 21.0f;
-        float scrollbar_size = 14.0f;
-        float grab_min_size = 10.0f;
+        float scrollbar_size = 12.0f;
+        float grab_min_size = 16.0f;
         float toolbar_button_size = 24.0f;
         float toolbar_padding = 6.0f;
         float toolbar_spacing = 4.0f;
