@@ -3233,8 +3233,9 @@ namespace lfs::vis {
                 const auto& src = *node->model;
                 auto cloned = std::make_unique<lfs::core::SplatData>(
                     src.get_max_sh_degree(),
-                    src.means_raw().clone(), src.sh0_raw().clone(), src.shN_raw().clone(),
-                    src.scaling_raw().clone(), src.rotation_raw().clone(), src.opacity_raw().clone(),
+                    src.means_raw().cpu(), src.sh0_raw().cpu(),
+                    src.shN_raw().is_valid() ? src.shN_raw().cpu() : lfs::core::Tensor{},
+                    src.scaling_raw().cpu(), src.rotation_raw().cpu(), src.opacity_raw().cpu(),
                     src.get_scene_scale());
                 cloned->set_active_sh_degree(src.get_active_sh_degree());
                 entry.data = std::move(cloned);
@@ -3289,12 +3290,12 @@ namespace lfs::vis {
 
         gaussian_clipboard_ = std::make_unique<lfs::core::SplatData>(
             src.get_max_sh_degree(),
-            src.means_raw().index_select(0, indices).contiguous(),
-            src.sh0_raw().index_select(0, indices).contiguous(),
-            std::move(shN_selected),
-            src.scaling_raw().index_select(0, indices).contiguous(),
-            src.rotation_raw().index_select(0, indices).contiguous(),
-            src.opacity_raw().index_select(0, indices).contiguous(),
+            src.means_raw().index_select(0, indices).contiguous().cpu(),
+            src.sh0_raw().index_select(0, indices).contiguous().cpu(),
+            shN_selected.is_valid() ? shN_selected.cpu() : lfs::core::Tensor{},
+            src.scaling_raw().index_select(0, indices).contiguous().cpu(),
+            src.rotation_raw().index_select(0, indices).contiguous().cpu(),
+            src.opacity_raw().index_select(0, indices).contiguous().cpu(),
             src.get_scene_scale());
         gaussian_clipboard_->set_active_sh_degree(src.get_active_sh_degree());
 
@@ -3309,8 +3310,9 @@ namespace lfs::vis {
         const auto& src = *gaussian_clipboard_;
         auto data = std::make_unique<lfs::core::SplatData>(
             src.get_max_sh_degree(),
-            src.means_raw().clone(), src.sh0_raw().clone(), src.shN_raw().clone(),
-            src.scaling_raw().clone(), src.rotation_raw().clone(), src.opacity_raw().clone(),
+            src.means_raw().cuda(), src.sh0_raw().cuda(),
+            src.shN_raw().is_valid() ? src.shN_raw().cuda() : lfs::core::Tensor{},
+            src.scaling_raw().cuda(), src.rotation_raw().cuda(), src.opacity_raw().cuda(),
             src.get_scene_scale());
         data->set_active_sh_degree(src.get_active_sh_degree());
 
@@ -3421,8 +3423,9 @@ namespace lfs::vis {
             } else if (entry.data && entry.data->size() > 0) {
                 auto paste_data = std::make_unique<lfs::core::SplatData>(
                     entry.data->get_max_sh_degree(),
-                    entry.data->means_raw().clone(), entry.data->sh0_raw().clone(), entry.data->shN_raw().clone(),
-                    entry.data->scaling_raw().clone(), entry.data->rotation_raw().clone(), entry.data->opacity_raw().clone(),
+                    entry.data->means_raw().cuda(), entry.data->sh0_raw().cuda(),
+                    entry.data->shN_raw().is_valid() ? entry.data->shN_raw().cuda() : lfs::core::Tensor{},
+                    entry.data->scaling_raw().cuda(), entry.data->rotation_raw().cuda(), entry.data->opacity_raw().cuda(),
                     entry.data->get_scene_scale());
                 paste_data->set_active_sh_degree(entry.data->get_active_sh_degree());
 
