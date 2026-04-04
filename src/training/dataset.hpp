@@ -230,8 +230,7 @@ namespace lfs::training {
             return {
                 {cam.get(), std::move(image)},
                 lfs::core::Tensor(), // Empty target
-                std::nullopt
-            };
+                std::nullopt};
         }
 
         /// Get batch of examples by indices

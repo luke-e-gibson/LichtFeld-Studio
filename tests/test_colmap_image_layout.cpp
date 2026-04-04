@@ -1,8 +1,8 @@
 /* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-#include "io/formats/colmap.hpp"
 #include "io/filesystem_utils.hpp"
+#include "io/formats/colmap.hpp"
 #include "io/loaders/colmap_loader.hpp"
 
 #include <filesystem>
