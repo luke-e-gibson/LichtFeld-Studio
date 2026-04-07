@@ -79,6 +79,19 @@ namespace lfs::vis {
                                                            std::move(before), std::move(after)));
         }
 
+        [[nodiscard]] std::vector<const core::SceneNode*> effectiveVisibleSplatNodes(const core::Scene& scene) {
+            std::vector<const core::SceneNode*> nodes;
+            for (const auto* node : scene.getNodes()) {
+                if (!node || !node->model) {
+                    continue;
+                }
+                if (scene.isNodeEffectivelyVisible(node->id)) {
+                    nodes.push_back(node);
+                }
+            }
+            return nodes;
+        }
+
         [[nodiscard]] bool hasActiveSelectionFilter(const RenderingManager* const rendering_manager) {
             if (!rendering_manager) {
                 return false;
@@ -2389,7 +2402,7 @@ namespace lfs::vis {
 
         case ContentType::SplatFiles:
             info.has_model = scene_.hasNodes();
-            info.num_gaussians = scene_.getTotalGaussianCount();
+            info.num_gaussians = scene_.getVisibleGaussianCount();
             info.num_nodes = scene_.getNodeCount();
             info.source_type = "Splat";
             if (!splat_paths_.empty()) {
@@ -3678,51 +3691,89 @@ namespace lfs::vis {
         python::set_selection_service(selection_service_.get());
     }
 
-    void SceneManager::deleteSelectedGaussians() {
+    std::expected<void, std::string> SceneManager::softDeleteSelectedGaussians() {
         auto selection = scene_.getSelectionMask();
         if (!selection || !selection->is_valid()) {
+            return std::unexpected("Nothing selected");
+        }
+
+        if (selection->count_nonzero() == 0) {
+            return std::unexpected("Nothing selected");
+        }
+
+        auto selection_mask = selection->to(lfs::core::DataType::Bool);
+        if (scene_.isConsolidated()) {
+            auto* combined = const_cast<core::SplatData*>(scene_.getCombinedModel());
+            if (!combined) {
+                return std::unexpected("No visible nodes");
+            }
+            if (static_cast<size_t>(selection_mask.numel()) != static_cast<size_t>(combined->size())) {
+                return std::unexpected("Selection size mismatch");
+            }
+
+            combined->soft_delete(selection_mask);
+        } else {
+            const auto nodes = effectiveVisibleSplatNodes(scene_);
+            if (nodes.empty()) {
+                return std::unexpected("No visible nodes");
+            }
+
+            size_t total_visible = 0;
+            for (const auto* node : nodes) {
+                total_visible += static_cast<size_t>(node->model->size());
+            }
+            if (static_cast<size_t>(selection_mask.numel()) != total_visible) {
+                return std::unexpected("Selection size mismatch");
+            }
+
+            size_t offset = 0;
+            for (const auto* node : nodes) {
+                const size_t node_size = static_cast<size_t>(node->model->size());
+                if (node_size == 0) {
+                    continue;
+                }
+
+                auto* mutable_node = scene_.getMutableNode(node->name);
+                if (!mutable_node || !mutable_node->model) {
+                    return std::unexpected(std::format("Visible node '{}' is missing a mutable model", node->name));
+                }
+
+                mutable_node->model->soft_delete(selection_mask.slice(0, offset, offset + node_size));
+                offset += node_size;
+            }
+        }
+
+        {
+            core::Scene::Transaction txn(scene_);
+            scene_.clearSelection();
+            scene_.notifyMutation(core::Scene::MutationType::MODEL_CHANGED);
+        }
+
+        if (auto* rm = services().renderingOrNull()) {
+            rm->markDirty(DirtyFlag::SPLATS | DirtyFlag::SELECTION);
+        }
+
+        return {};
+    }
+
+    void SceneManager::deleteSelectedGaussians() {
+        if (const auto selection = scene_.getSelectionMask(); !selection || !selection->is_valid()) {
             LOG_INFO("No Gaussians selected to delete");
             return;
         }
-
-        auto nodes = scene_.getVisibleNodes();
-        if (nodes.empty())
-            return;
 
         auto entry = std::make_unique<op::SceneSnapshot>(*this, "edit.delete");
         entry->captureTopology();
         entry->captureSelection();
 
-        size_t offset = 0;
-        bool any_deleted = false;
-
-        for (const auto* node : nodes) {
-            if (!node || !node->model)
-                continue;
-
-            const size_t node_size = node->model->size();
-            if (node_size == 0)
-                continue;
-
-            auto node_selection = selection->slice(0, offset, offset + node_size);
-            auto bool_mask = node_selection.to(lfs::core::DataType::Bool);
-            node->model->soft_delete(bool_mask);
-
-            any_deleted = true;
-            offset += node_size;
+        if (const auto result = softDeleteSelectedGaussians(); !result) {
+            LOG_WARN("Failed to delete selected Gaussians: {}", result.error());
+            return;
         }
 
-        if (any_deleted) {
-            LOG_INFO("Deleted selected Gaussians");
-            scene_.markDirty();
-            scene_.clearSelection();
-
-            entry->captureAfter();
-            op::pushSceneSnapshotIfChanged(std::move(entry));
-
-            if (auto* rm = services().renderingOrNull())
-                rm->markDirty(DirtyFlag::SPLATS | DirtyFlag::SELECTION);
-        }
+        LOG_INFO("Deleted selected Gaussians");
+        entry->captureAfter();
+        op::pushSceneSnapshotIfChanged(std::move(entry));
     }
 
     void SceneManager::invertSelection() {

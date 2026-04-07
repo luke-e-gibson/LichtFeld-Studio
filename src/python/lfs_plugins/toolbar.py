@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Viewport toolbars rendered from a retained RmlUI data model."""
 
+from .histogram_support import histogram_mode_available
 from .tools import ToolRegistry
 
 
@@ -12,6 +13,8 @@ _toolbar_controller = None
 
 def _icon_src(icon_name):
     """Build icon src path relative to the RML document in assets/rmlui/."""
+    if "." in icon_name:
+        return f"../icon/{icon_name}"
     return f"../icon/{icon_name}.png"
 
 
@@ -242,6 +245,7 @@ class _UtilityToolbarController:
 
     def snapshot(self):
         import lichtfeld as lf
+        from .histogram_support import histogram_mode_available
 
         try:
             camera_mode = str(lf.get_camera_navigation_mode()).lower()
@@ -294,6 +298,7 @@ class _UtilityToolbarController:
         render_mode_buttons = []
         projection_buttons = []
         utility_extra_buttons = []
+        utility_bottom_buttons = []
         if has_render_manager:
             for icon_name, mode_id, tooltip_key in self._RENDER_MODE_SPECS:
                 render_mode_buttons.append(
@@ -331,6 +336,18 @@ class _UtilityToolbarController:
                 )
             )
 
+        if histogram_mode_available(lf.ui.context()):
+            utility_bottom_buttons.append(
+                _button_record(
+                    "util-histogram",
+                    "toggle_panel",
+                    "lfs.histogram",
+                    _icon_src("histogram.png"),
+                    tooltip_key="toolbar.histogram",
+                    selected=lf.ui.is_panel_enabled("lfs.histogram"),
+                )
+            )
+
         return {
             "camera_mode_buttons": camera_mode_buttons,
             "show_render_controls": has_render_manager,
@@ -338,6 +355,7 @@ class _UtilityToolbarController:
             "render_mode_buttons": render_mode_buttons,
             "projection_buttons": projection_buttons,
             "utility_extra_buttons": utility_extra_buttons,
+            "utility_bottom_buttons": utility_bottom_buttons,
         }
 
     def dispatch(self, action, value):
@@ -360,6 +378,12 @@ class _UtilityToolbarController:
             return
         if action == "toggle_sequencer":
             lf.ui.set_sequencer_visible(not lf.ui.is_sequencer_visible())
+            return
+        if action == "toggle_panel":
+            if value == "lfs.histogram" and not histogram_mode_available(lf.ui.context()):
+                lf.ui.set_panel_enabled(value, False)
+                return
+            lf.ui.set_panel_enabled(value, not lf.ui.is_panel_enabled(value))
             return
         if action != "set_render_mode":
             return
@@ -388,6 +412,7 @@ class _ViewportToolbarController:
         "render_mode_buttons",
         "projection_buttons",
         "utility_extra_buttons",
+        "utility_bottom_buttons",
         "gizmo_buttons",
         "submode_buttons",
         "pivot_buttons",
@@ -440,6 +465,7 @@ class _ViewportToolbarController:
         self._sync_records("render_mode_buttons", utility_state["render_mode_buttons"])
         self._sync_records("projection_buttons", utility_state["projection_buttons"])
         self._sync_records("utility_extra_buttons", utility_state["utility_extra_buttons"])
+        self._sync_records("utility_bottom_buttons", utility_state["utility_bottom_buttons"])
         self._sync_records("gizmo_buttons", gizmo_state["gizmo_buttons"])
         self._sync_records("submode_buttons", gizmo_state["submode_buttons"])
         self._sync_records("pivot_buttons", gizmo_state["pivot_buttons"])

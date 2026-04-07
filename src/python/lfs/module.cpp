@@ -1113,10 +1113,9 @@ NB_MODULE(lichtfeld, m) {
             auto* sm = lfs::python::get_scene_manager();
             if (!sm)
                 return 0;
-            const auto* model = sm->getScene().getCombinedModel();
-            return model ? model->size() : 0;
+            return sm->getScene().getVisibleGaussianCount();
         },
-        "Get total number of gaussians in scene");
+        "Get number of active gaussians in scene");
 
     m.def(
         "get_node_transform", [](const std::string& name) -> std::optional<std::vector<float>> {
