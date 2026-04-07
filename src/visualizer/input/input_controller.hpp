@@ -162,7 +162,7 @@ namespace lfs::vis {
         std::pair<glm::vec3, glm::vec3> computePickRay(double x, double y) const;
         input::ToolMode getCurrentToolMode() const;
         void clearViewportDragState();
-        bool snapViewportToNearestAxis(Viewport& target_viewport);
+        bool snapViewportToNearestAxis(Viewport& target_viewport, SplitViewPanelId panel);
 
         // Training pause/resume helpers
         void onCameraMovementStart();

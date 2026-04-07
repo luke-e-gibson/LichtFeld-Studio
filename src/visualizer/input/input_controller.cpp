@@ -706,6 +706,7 @@ namespace lfs::vis {
         } else if (action == input::ACTION_RELEASE) {
             bool was_dragging = false;
             Viewport* released_viewport = drag_viewport_;
+            const SplitViewPanelId released_panel = drag_split_panel_;
 
             if (drag_mode_ == DragMode::Pan) {
                 drag_mode_ = DragMode::None;
@@ -722,9 +723,9 @@ namespace lfs::vis {
                     viewport_.camera.endRotateAroundCenter();
                 }
                 if (released_viewport) {
-                    snapViewportToNearestAxis(*released_viewport);
+                    snapViewportToNearestAxis(*released_viewport, released_panel);
                 } else {
-                    snapViewportToNearestAxis(viewport_);
+                    snapViewportToNearestAxis(viewport_, released_panel);
                 }
                 drag_mode_ = DragMode::None;
                 drag_button_ = -1;
@@ -1420,12 +1421,13 @@ namespace lfs::vis {
         // Handle missed mouse release events (e.g., outside window)
         if (drag_mode_ == DragMode::Orbit && drag_button_released) {
             auto* const released_viewport = drag_viewport_ ? drag_viewport_ : &viewport_;
+            const SplitViewPanelId released_panel = drag_split_panel_;
             if (drag_viewport_) {
                 drag_viewport_->camera.endRotateAroundCenter();
-                snapViewportToNearestAxis(*drag_viewport_);
+                snapViewportToNearestAxis(*drag_viewport_, released_panel);
             } else {
                 viewport_.camera.endRotateAroundCenter();
-                snapViewportToNearestAxis(viewport_);
+                snapViewportToNearestAxis(viewport_, released_panel);
             }
             drag_mode_ = DragMode::None;
             drag_button_ = -1;
@@ -1976,7 +1978,8 @@ namespace lfs::vis {
         }
     }
 
-    bool InputController::snapViewportToNearestAxis(Viewport& target_viewport) {
+    bool InputController::snapViewportToNearestAxis(Viewport& target_viewport,
+                                                    const SplitViewPanelId panel) {
         if (!camera_view_snap_enabled_) {
             return false;
         }
@@ -1989,12 +1992,7 @@ namespace lfs::vis {
         }
 
         if (auto* const rendering = services().renderingOrNull()) {
-            const auto settings = rendering->getSettings();
-            lfs::core::events::ui::GridSettingsChanged{
-                .enabled = settings.show_grid,
-                .plane = snapped_axis,
-                .opacity = settings.grid_opacity}
-                .emit();
+            rendering->setGridPlaneForPanel(panel, snapped_axis);
         }
 
         return true;
