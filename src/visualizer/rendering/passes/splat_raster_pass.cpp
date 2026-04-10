@@ -116,9 +116,9 @@ namespace lfs::vis {
                 if (!gpu_frame) {
                     render_error = gpu_frame.error();
                 } else {
-                        viewport_frame = lfs::rendering::GaussianGpuFrameResult{
-                            .frame = *gpu_frame,
-                            .metadata =
+                    viewport_frame = lfs::rendering::GaussianGpuFrameResult{
+                        .frame = *gpu_frame,
+                        .metadata =
                             {.depth_panel_count = 1,
                              .valid = true,
                              .depth_is_ndc = gpu_frame->depth_is_ndc,

@@ -761,7 +761,7 @@ namespace lfs::rendering {
             const auto image_cpu = Tensor::from_vector(
                 pixels,
                 {static_cast<size_t>(height), static_cast<size_t>(width), static_cast<size_t>(channels)},
-                                                       lfs::core::Device::CPU);
+                lfs::core::Device::CPU);
             {
                 LOG_TIMER_TRACE("permute and cuda upload");
                 result.image = image_cpu.permute({2, 0, 1}).cuda();

@@ -9,8 +9,8 @@
 #include "rendering/coordinate_conventions.hpp"
 
 #include <OpenImageIO/imageio.h>
-#include <glad/glad.h>
 #include <format>
+#include <glad/glad.h>
 #include <memory>
 #include <vector>
 
@@ -53,10 +53,22 @@ namespace lfs::rendering {
         vbo_ = std::move(*vbo_result);
 
         constexpr float quad_vertices[] = {
-            -1.0f, -1.0f, 0.0f, 0.0f,
-            1.0f, -1.0f, 1.0f, 0.0f,
-            -1.0f, 1.0f, 0.0f, 1.0f,
-            1.0f, 1.0f, 1.0f, 1.0f,
+            -1.0f,
+            -1.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+            -1.0f,
+            1.0f,
+            0.0f,
+            -1.0f,
+            1.0f,
+            0.0f,
+            1.0f,
+            1.0f,
+            1.0f,
+            1.0f,
+            1.0f,
         };
 
         glBindVertexArray(vao_.get());
