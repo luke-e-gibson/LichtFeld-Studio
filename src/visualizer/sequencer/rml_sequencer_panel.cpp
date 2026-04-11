@@ -134,10 +134,14 @@ namespace lfs::vis {
 
         if (id == "btn-skip-back")
             ctrl.seekToFirstKeyframe();
+        else if (id == "btn-prev-keyframe")
+            ctrl.seekToPreviousKeyframe();
         else if (id == "btn-stop")
             ctrl.stop();
         else if (id == "btn-play")
             ctrl.togglePlayPause();
+        else if (id == "btn-next-keyframe")
+            ctrl.seekToNextKeyframe();
         else if (id == "btn-skip-forward")
             ctrl.seekToLastKeyframe();
         else if (id == "btn-loop") {
@@ -299,7 +303,8 @@ namespace lfs::vis {
         }
 
         for (const char* btn_id : {"btn-skip-back", "btn-stop", "btn-play",
-                                   "btn-skip-forward", "btn-loop", "btn-add",
+                                   "btn-prev-keyframe", "btn-next-keyframe", "btn-skip-forward",
+                                   "btn-loop", "btn-add",
                                    "btn-camera-path", "btn-snap", "btn-follow",
                                    "btn-film-strip", "btn-preview", "btn-equirect", "btn-speed",
                                    "btn-format", "btn-save-path", "btn-load-path",
