@@ -311,7 +311,7 @@ namespace lfs::vis::gui {
 
         if (auto* const rm = viewer_->getRenderingManager()) {
             rm->setOverlayAnimationActive(is_playing);
-            if (is_playing && ui_state_.follow_playback) {
+            if (is_playing && ui_state_.follow_playback && !ui_state_.show_pip_preview) {
                 rm->markDirty(DirtyFlag::CAMERA);
                 const auto state = controller_.currentCameraState();
                 auto& vp = viewer_->getViewport();
@@ -1404,8 +1404,8 @@ namespace lfs::vis::gui {
             }
         }
 
-        if (rm->renderPreviewFrame(sm, cam_rot, cam_pos, cam_focal_length_mm,
-                                   pip_fbo_, pip_texture_, PREVIEW_WIDTH, PREVIEW_HEIGHT)) {
+        if (rm->renderPreviewTexture(sm, cam_rot, cam_pos, cam_focal_length_mm,
+                                     pip_texture_, PREVIEW_WIDTH, PREVIEW_HEIGHT)) {
             pip_last_render_time_ = now;
             if (!is_playing) {
                 pip_last_keyframe_ = selected;

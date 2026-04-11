@@ -153,13 +153,17 @@ namespace lfs::vis {
             ui.show_camera_path = !ui.show_camera_path;
         else if (id == "btn-snap")
             ui.snap_to_grid = !ui.snap_to_grid;
-        else if (id == "btn-follow")
+        else if (id == "btn-follow") {
             ui.follow_playback = !ui.follow_playback;
-        else if (id == "btn-film-strip")
+            if (ui.follow_playback)
+                ui.show_pip_preview = false;
+        } else if (id == "btn-film-strip")
             ui.show_film_strip = !ui.show_film_strip;
-        else if (id == "btn-preview")
+        else if (id == "btn-preview") {
             ui.show_pip_preview = !ui.show_pip_preview;
-        else if (id == "btn-equirect") {
+            if (ui.show_pip_preview)
+                ui.follow_playback = false;
+        } else if (id == "btn-equirect") {
             ui.equirectangular = !ui.equirectangular;
             auto event = lfs::core::events::ui::RenderSettingsChanged{};
             event.equirectangular = ui.equirectangular;
