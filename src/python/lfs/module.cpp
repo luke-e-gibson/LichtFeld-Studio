@@ -1829,6 +1829,10 @@ Mesh-to-Splat:
 Splat Simplify:
   lf.simplify_splats("name", ratio=..., knn_k=..., merge_cap=..., opacity_prune_threshold=...)
                                     - Simplify a splat node into a new output node
+  lf.simplify_splat_data_with_history(splat_data, ...)
+                                    - Simplify a SplatData value and return output + merge tree
+  lf.build_splat_lod_hierarchy(splat_data, ratio=..., max_levels=..., min_points=...)
+                                    - Build a script-side multi-level LOD hierarchy object
   lf.cancel_splat_simplify()         - Cancel the active simplify job
   lf.is_splat_simplify_active()      - Check if simplification is running
   lf.get_splat_simplify_progress()   - Get progress (0.0-1.0)
@@ -1890,6 +1894,38 @@ Example:
             return std::format("DatasetInfo(base_path='{}', images={}, masks={})",
                                lfs::core::path_to_utf8(i.base_path), i.image_count, i.mask_count);
         });
+
+    m.def(
+        "build_splat_lod_hierarchy",
+        [](nb::object source,
+           double ratio,
+           int knn_k,
+           double merge_cap,
+           float opacity_prune_threshold,
+           std::optional<int> max_levels,
+           int min_points,
+           nb::object progress) {
+            auto helper = nb::module_::import_("lfs_splat_lod_hierarchy").attr("build_splat_lod_hierarchy");
+            nb::object py_max_levels = max_levels ? nb::cast(*max_levels) : nb::none();
+            return helper(
+                std::move(source),
+                ratio,
+                knn_k,
+                merge_cap,
+                opacity_prune_threshold,
+                py_max_levels,
+                min_points,
+                std::move(progress));
+        },
+        nb::arg("source") = nb::none(),
+        nb::arg("ratio") = 0.5,
+        nb::arg("knn_k") = 16,
+        nb::arg("merge_cap") = 0.5,
+        nb::arg("opacity_prune_threshold") = 0.1f,
+        nb::arg("max_levels") = nb::none(),
+        nb::arg("min_points") = 1,
+        nb::arg("progress") = nb::none(),
+        "Build a script-side multi-level LOD hierarchy from SplatData or a scene node.");
 
     m.def(
         "detect_dataset_info",
@@ -1955,7 +1991,7 @@ Example:
         // Core access
         "context", "gaussians", "session", "get_scene",
         // Types
-        "Tensor", "Hook", "ScopedHandler",
+        "Tensor", "Hook", "ScopedHandler", "SplatSimplifyResult", "SplatSimplifyMergeTree",
         // Hook decorators
         "on_training_start", "on_iteration_start",
         "on_post_step", "on_pre_optimizer_step", "on_training_end",
@@ -1963,7 +1999,8 @@ Example:
         "mesh_to_splat", "is_mesh2splat_active",
         "get_mesh2splat_progress", "get_mesh2splat_stage", "get_mesh2splat_error",
         // Splat simplify
-        "simplify_splats", "cancel_splat_simplify", "is_splat_simplify_active",
+        "simplify_splats", "simplify_splat_data_with_history", "build_splat_lod_hierarchy",
+        "cancel_splat_simplify", "is_splat_simplify_active",
         "get_splat_simplify_progress", "get_splat_simplify_stage", "get_splat_simplify_error",
         // Animation
         "on_frame", "stop_animation",

@@ -267,6 +267,36 @@ TEST_F(PythonIntegrationTest, FormatPythonCodeRepairsUnexpectedTopLevelIndent) {
     EXPECT_NE(result.code.find("print(\"hello world\")"), std::string::npos);
 }
 
+TEST_F(PythonIntegrationTest, FormatPythonCodeCommentsLeadingPreambleBullets) {
+    const auto result = lfs::python::format_python_code(
+        "1. SOURCE_NAME if set\n"
+        "2. currently selected node\n"
+        "3. first splat node in the scene\n"
+        "\n"
+        "from pathlib import Path\n"
+        "import lichtfeld as lf\n");
+
+    if (formatterUnavailable(result)) {
+        GTEST_SKIP() << result.error;
+    }
+    ASSERT_TRUE(result.success) << result.error;
+    EXPECT_NE(result.code.find("# 1. SOURCE_NAME if set"), std::string::npos);
+    EXPECT_NE(result.code.find("# 2. currently selected node"), std::string::npos);
+    EXPECT_NE(result.code.find("from pathlib import Path"), std::string::npos);
+    EXPECT_NE(result.code.find("import lichtfeld as lf"), std::string::npos);
+}
+
+TEST_F(PythonIntegrationTest, FormatPythonCodeReportsSyntaxErrorWithoutUnexpectedResultFallback) {
+    const auto result = lfs::python::format_python_code("import os\nif True print('x')\n");
+
+    if (formatterUnavailable(result)) {
+        GTEST_SKIP() << result.error;
+    }
+    ASSERT_FALSE(result.success);
+    EXPECT_FALSE(result.error.empty());
+    EXPECT_EQ(result.error.find("unexpected result"), std::string::npos);
+}
+
 TEST_F(PythonIntegrationTest, PyTensorBooleanRowMaskIndexingMatchesTorch) {
     const auto result = runPythonTensorSnippet(R"PY(
 import lichtfeld as lf

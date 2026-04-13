@@ -75,7 +75,7 @@ namespace lfs::python {
 
             std::optional<PySplatData> get_splat_data() const {
                 if (splat_data)
-                    return PySplatData(splat_data.get());
+                    return PySplatData(splat_data);
                 return std::nullopt;
             }
 
