@@ -322,7 +322,7 @@ namespace gsplat_fwd {
         const float* thin_prism_coeffs, // [C, 2] optional (can be nullptr)
         const float* model_transforms,  // [num_transforms, 4, 4] row-major optional (can be nullptr)
         // node visibility culling
-        const int* transform_indices,     // [N_total] optional (can be nullptr)
+        const int* transform_indices, // [N_total] optional (can be nullptr)
         int num_transforms,
         const bool* node_visibility_mask, // [num_visibility_nodes] optional (can be nullptr)
         int num_visibility_nodes,

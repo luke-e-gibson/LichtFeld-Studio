@@ -29,15 +29,15 @@ namespace gsplat_fwd {
         const uint32_t N,
         const uint32_t n_isects,
         const bool packed,
-        const vec3* __restrict__ means,           // [N_total, 3] (N-sized, use visible_indices for access)
-        const vec4* __restrict__ quats,           // [N_total, 4] (N-sized, use visible_indices for access)
-        const vec3* __restrict__ scales,          // [N_total, 3] (N-sized, use visible_indices for access)
-        const scalar_t* __restrict__ colors,      // [C, M, CDIM] or [nnz, CDIM] (M-sized from SH)
-        const scalar_t* __restrict__ opacities,   // [N_total] (N-sized, use visible_indices for access)
-        const scalar_t* __restrict__ backgrounds, // [C, CDIM]
-        const bool* __restrict__ masks,           // [C, tile_height, tile_width]
-        const scalar_t* __restrict__ depths,      // [C, M] per-gaussian depths (M-sized from projection)
-        const float* __restrict__ model_transforms, // [num_transforms, 4, 4] row-major optional
+        const vec3* __restrict__ means,                // [N_total, 3] (N-sized, use visible_indices for access)
+        const vec4* __restrict__ quats,                // [N_total, 4] (N-sized, use visible_indices for access)
+        const vec3* __restrict__ scales,               // [N_total, 3] (N-sized, use visible_indices for access)
+        const scalar_t* __restrict__ colors,           // [C, M, CDIM] or [nnz, CDIM] (M-sized from SH)
+        const scalar_t* __restrict__ opacities,        // [N_total] (N-sized, use visible_indices for access)
+        const scalar_t* __restrict__ backgrounds,      // [C, CDIM]
+        const bool* __restrict__ masks,                // [C, tile_height, tile_width]
+        const scalar_t* __restrict__ depths,           // [C, M] per-gaussian depths (M-sized from projection)
+        const float* __restrict__ model_transforms,    // [num_transforms, 4, 4] row-major optional
         const int32_t* __restrict__ transform_indices, // [N_total] optional
         const int num_transforms,
         const uint32_t image_width,
